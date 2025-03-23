@@ -8,7 +8,7 @@ from pydantic import BaseModel, EmailStr, Field, validator
 
 from ...schemas import user_schemas
 from ...models import user_models
-from ...utils import utils_users
+from ...utils import users_utils
 from app.config.database import get_db
 from app.config.config import get_settings
 
@@ -62,10 +62,10 @@ async def register_user(user: user_schemas.UserCreate, background_tasks: Backgro
         if db_user:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
         
-        hashed_password = utils_users.get_password_hash(user.password)
+        hashed_password = users_utils.get_password_hash(user.password)
         
         # Generate OTP
-        otp = utils_users.generate_otp()
+        otp = users_utils.generate_otp()
         otp_expires_at = datetime.utcnow() + timedelta(minutes=10)
         
         db_user = user_models.User(
@@ -83,7 +83,7 @@ async def register_user(user: user_schemas.UserCreate, background_tasks: Backgro
         db.refresh(db_user)
         
         # Send OTP to user's email (in background to speed up response)
-        background_tasks.add_task(utils_users.send_otp_email, user.email, otp)
+        background_tasks.add_task(users_utils.send_otp_email, user.email, otp)
         logger.info(f"Registration successful and OTP sending initiated for {user.email}")
         
         if not settings.EMAIL_ENABLED:
@@ -103,28 +103,47 @@ async def register_user(user: user_schemas.UserCreate, background_tasks: Backgro
 @router.post("/verify-otp", response_model=user_schemas.Token)
 async def verify_otp(user_data: user_schemas.UserVerifyOTP, db: Session = Depends(get_db)):
     """
-    Verify OTP code and activate user account.
+    Verifikasi kode OTP dan aktifkan akun pengguna.
     """
     try:
-        # Find user by email
-        db_user = db.query(user_models.User).filter(user_models.User.email == user_data.email).first()
-        if not db_user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Email not found"
-            )
+        db_user = None
         
-        # Verify OTP
+        # Cari pengguna berdasarkan email jika disediakan
+        if user_data.email:
+            db_user = db.query(user_models.User).filter(user_models.User.email == user_data.email).first()
+            if not db_user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Email tidak ditemukan"
+                )
+        else:
+            # Jika email tidak disediakan, cari pengguna berdasarkan kode OTP
+            current_time = datetime.utcnow()
+            matching_users = db.query(user_models.User).filter(
+                user_models.User.otp_code == user_data.otp_code,
+                user_models.User.otp_expires_at > current_time
+            ).all()
+            
+            if not matching_users:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Kode OTP tidak valid atau sudah kedaluwarsa"
+                )
+                
+            # Jika ada lebih dari satu pengguna dengan kode yang sama,
+            # ambil yang paling baru
+            db_user = sorted(matching_users, key=lambda u: u.otp_expires_at, reverse=True)[0]
+        
+        # Verifikasi OTP
         current_time = datetime.utcnow()
         
         if not db_user.otp_code or not db_user.otp_expires_at:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No OTP found for this user"
+                detail="Tidak ada kode OTP yang ditemukan untuk pengguna ini"
             )
         
-        # Add brute force protection - count failed attempts
-        failed_attempts_key = f"otp_attempts_{db_user.email}"
+        # Tambahkan perlindungan brute force - hitung percobaan gagal
         failed_attempts = getattr(db_user, "failed_otp_attempts", 0) or 0
         
         if db_user.otp_code != user_data.otp_code:
@@ -138,36 +157,36 @@ async def verify_otp(user_data: user_schemas.UserVerifyOTP, db: Session = Depend
                 db.commit()
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Too many failed attempts. Request a new OTP code."
+                    detail="Terlalu banyak percobaan gagal. Minta kode OTP baru."
                 )
             
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid OTP code. {5-failed_attempts} attempts remaining."
+                detail=f"Kode OTP tidak valid. {5-failed_attempts} percobaan tersisa."
             )
         
         if current_time > db_user.otp_expires_at:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="OTP code has expired. Request a new code."
+                detail="Kode OTP telah kedaluwarsa. Minta kode baru."
             )
         
-        # Reset failed attempts counter
+        # Reset penghitung percobaan gagal
         db_user.failed_otp_attempts = 0
         
-        # Mark email as verified
+        # Tandai email sebagai terverifikasi
         db_user.email_verified_at = current_time
         db_user.otp_code = ''
         db_user.otp_expires_at = None
         db.commit()
         
-        # Create access token
+        # Buat token akses
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_token = utils_users.create_access_token(
+        access_token = users_utils.create_access_token(
             data={"sub": db_user.email}, expires_delta=access_token_expires
         )
         
-        return {"access_token": access_token, "token_type": "bearer"}
+        return {"access_token": access_token, "token_type": "bearer", "email": db_user.email}
         
     except HTTPException as he:
         raise he
@@ -176,7 +195,7 @@ async def verify_otp(user_data: user_schemas.UserVerifyOTP, db: Session = Depend
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to verify OTP"
+            detail="Gagal memverifikasi OTP"
         )
 
 @router.post("/resend-otp")
@@ -201,14 +220,14 @@ async def resend_otp(request: ResendOTPRequest, db: Session = Depends(get_db)):
             )
         
         # Generate new OTP
-        otp = utils_users.generate_otp()
+        otp = users_utils.generate_otp()
         user.otp_code = otp
         user.otp_expires_at = datetime.utcnow() + timedelta(minutes=10)
         user.failed_otp_attempts = 0 
         db.commit()
         
         # Send OTP to user's email
-        await utils_users.send_otp_email(user.email, otp)
+        await users_utils.send_otp_email(user.email, otp)
         
         if not settings.EMAIL_ENABLED:
             logger.info(f"Email sending is disabled. OTP for {user.email}: {otp}")
@@ -229,7 +248,7 @@ async def resend_otp(request: ResendOTPRequest, db: Session = Depends(get_db)):
 @router.post("/forgot-password")
 async def forgot_password(
     request: ForgotPasswordRequest, 
-    current_user: user_models.User = Depends(utils_users.get_current_user),
+    current_user: user_models.User = Depends(users_utils.get_current_user),
     db: Session = Depends(get_db)
 ):
     try:
@@ -249,14 +268,14 @@ async def forgot_password(
             )
         
         # Generate new OTP for password reset
-        otp = utils_users.generate_otp()
+        otp = users_utils.generate_otp()
         user.otp_code = otp
         user.otp_expires_at = datetime.utcnow() + timedelta(minutes=10)
         user.failed_otp_attempts = 0
         db.commit()
         
         # Send OTP to user's email
-        await utils_users.send_password_reset_email(user.email, otp)
+        await users_utils.send_password_reset_email(user.email, otp)
         
         if not settings.EMAIL_ENABLED:
             logger.info(f"Email sending is disabled. Password reset OTP for {user.email}: {otp}")
@@ -325,7 +344,7 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
             )
         
         # Update password
-        user.password = utils_users.get_password_hash(request.new_password)
+        user.password = users_utils.get_password_hash(request.new_password)
         user.otp_expires_at = None
         user.failed_otp_attempts = 0
         user.updated_at = datetime.utcnow()
@@ -346,7 +365,7 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
 @router.post("/change-password")
 async def change_password(
     request: ChangePasswordRequest, 
-    current_user: user_models.User = Depends(utils_users.get_current_user), 
+    current_user: user_models.User = Depends(users_utils.get_current_user), 
     db: Session = Depends(get_db)
 ):
     """
@@ -354,26 +373,26 @@ async def change_password(
     """
     try:
         # Verify current password
-        if not utils_users.verify_password(request.current_password, current_user.password):
+        if not users_utils.verify_password(request.current_password, current_user.password):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Current password is incorrect"
             )
         
         # Check if new password is different from current one
-        if utils_users.verify_password(request.new_password, current_user.password):
+        if users_utils.verify_password(request.new_password, current_user.password):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="New password must be different from current password"
             )
         
         # Update password
-        current_user.password = utils_users.get_password_hash(request.new_password)
+        current_user.password = users_utils.get_password_hash(request.new_password)
         current_user.updated_at = datetime.utcnow()
         db.commit()
         
         try:
-            await utils_users.send_password_changed_notification(current_user.email)
+            await users_utils.send_password_changed_notification(current_user.email)
         except Exception as e:
             logger.warning(f"Failed to send password change notification: {str(e)}")
         
