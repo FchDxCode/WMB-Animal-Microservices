@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     # Flag to enable/disable email functionality
     EMAIL_ENABLED: bool = False
     
+    STORAGE_PATH: str 
+    
     class Config:
         env_file = ".env"
 
