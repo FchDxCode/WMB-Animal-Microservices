@@ -3,12 +3,23 @@ import bcrypt from 'bcrypt';
 import { randomInt } from 'crypto';
 import { User, GambarUser } from '../models/userModels.js';
 import { sendOtpEmail } from '../utils/emailUtils.js';
+import { uploadPaths, createImageUrl, uploadFolders } from '../utils/uploadUtils.js';
 import fs from 'fs';
 import path from 'path';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const BASE_STORAGE_PATH = process.env.STORAGE_PATH || 'public/storage';
+const USER_IMAGES_FOLDER = 'profile-images'; 
+
+const UPLOAD_DIR = uploadPaths.userImages;
+
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
 
 const OTP_EXPIRATION_MS = 10 * 60 * 1000; // 10 menit
-// Direktori penyimpanan gambar (sesuaikan dengan konfigurasi upload Anda)
-const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'profile-images');
 
 /**
  * Get profile user yang sedang login.
@@ -25,7 +36,7 @@ export const getProfile = async (req, res) => {
         name: user.name,
         email: user.email,
         email_verified_at: user.email_verified_at,
-        profile_image: userImage ? userImage.gambar : null,
+        profile_image: userImage ? createImageUrl(userImage.gambar, uploadFolders.userImages) : null,
       },
     });
   } catch (error) {
@@ -117,14 +128,11 @@ export const updateProfile = async (req, res) => {
  */
 const deleteFile = (filename) => {
   try {
-    // Jika filename adalah null atau undefined, tidak ada yang perlu dihapus
     if (!filename) return true;
     
     const filePath = path.join(UPLOAD_DIR, filename);
     
-    // Cek apakah file ada
     if (fs.existsSync(filePath)) {
-      // Hapus file
       fs.unlinkSync(filePath);
       console.log(`File ${filename} berhasil dihapus`);
       return true;
@@ -152,17 +160,14 @@ export const updateProfileImage = async (req, res) => {
       });
     }
 
-    // Ambil nama file hasil upload
     const profileImageFilename = req.file.filename;
-
-    // Cari record GambarUser yang sudah ada
-    let userImage = await GambarUser.findOne({ where: { users_id: req.user.id } });
+    let userImage = await GambarUser.findOne({ 
+      where: { users_id: req.user.id } 
+    });
     
-    // Variabel untuk menyimpan nama file gambar lama
     let oldImageFilename = null;
     
     if (!userImage) {
-      // Jika tidak ditemukan, buat record baru
       userImage = await GambarUser.create({
         users_id: req.user.id,
         gambar: profileImageFilename,
@@ -170,37 +175,35 @@ export const updateProfileImage = async (req, res) => {
       
       console.log(`Membuat record gambar profil baru untuk user ${req.user.id}`);
     } else {
-      // Simpan nama file gambar lama sebelum diupdate
       oldImageFilename = userImage.gambar;
-      
-      // Update field gambar
       userImage.gambar = profileImageFilename;
       await userImage.save();
       
       console.log(`Mengupdate gambar profil user ${req.user.id} dari ${oldImageFilename} ke ${profileImageFilename}`);
     }
     
-    // Hapus file gambar lama jika ada
+    // Hapus file lama jika ada
     if (oldImageFilename) {
       const deleteResult = deleteFile(oldImageFilename);
       if (deleteResult) {
         console.log(`Berhasil menghapus file gambar lama: ${oldImageFilename}`);
       } else {
         console.warn(`Gagal menghapus file gambar lama: ${oldImageFilename}`);
-        // Kita tetap lanjutkan proses meskipun gagal menghapus file lama
       }
     }
 
     return res.status(200).json({
       success: true,
       message: 'Profile image berhasil diperbarui.',
-      data: { profile_image: userImage.gambar },
+      data: { 
+        profile_image: createImageUrl(userImage.gambar, uploadFolders.userImages)
+      },
     });
   } catch (error) {
     console.error('Error updateProfileImage:', error);
     
-    // Jika terjadi error, hapus file yang baru diupload (cleanup)
-    if (req.file && req.file.filename) {
+    // Cleanup file baru jika terjadi error
+    if (req.file?.filename) {
       try {
         deleteFile(req.file.filename);
         console.log(`File baru ${req.file.filename} dihapus karena proses update gagal`);

@@ -2,7 +2,7 @@
 
 import bcrypt from 'bcrypt';
 import { randomInt } from 'crypto';
-import { User } from '../models/userModels.js';
+import { User, GambarUser  } from '../models/userModels.js';
 import { sendOtpEmail } from '../utils/emailUtils.js';
 
 const OTP_EXPIRATION_MS = 10 * 60 * 1000; // 10 menit

@@ -5,11 +5,22 @@ import redoc from 'redoc-express';
 import swaggerSpec from './src/config/swagger.js'; 
 import dotenv from 'dotenv';
 import swaggerJSDoc from 'swagger-jsdoc';
+import path from 'path';
+import { runPaymentExpirationScheduler } from './src/scheduler/paymentExpirationScheduler.js';
 
 // import routes
 import registerRoutes from './src/routes/registerRoutes.js';
 import loginRoutes from './src/routes/loginRoutes.js';
 import userRoutes from './src/routes/userRoutes.js';
+import petRoutes from './src/routes/petRoutes.js';
+import alamatUserRoutes from './src/routes/alamatUserRoutes.js';
+import artikelRoutes from './src/routes/artikelRoutes.js';
+import klinikRoutes from './src/routes/klinikRoutes.js';
+import bookingKlinikRoutes from './src/routes/bookingKlinikRoutes.js';
+import produkRoutes from './src/routes/produkRoutes.js';
+import coinUserRoutes from './src/routes/coinUserRoutes.js';
+import mediaSectionsRoutes from './src/routes/mediaSectionsRoutes.js';
+import configWebsiteRoutes from './src/routes/configWebsiteRoutes.js';
 
 dotenv.config();
 
@@ -30,6 +41,18 @@ const openapiSpecification = swaggerJSDoc(options);
 app.use('/api/auth', registerRoutes);
 app.use('/api/auth', loginRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/pets', petRoutes);
+app.use('/api/alamat', alamatUserRoutes);
+app.use('/api/artikel', artikelRoutes);
+app.use('/api/klinik', klinikRoutes);
+app.use('/api/booking-klinik', bookingKlinikRoutes);
+app.use('/api/produk', produkRoutes);
+app.use('/api/coin', coinUserRoutes);
+app.use('/api/media-sections', mediaSectionsRoutes);
+app.use('/api/config-website', configWebsiteRoutes);
+
+// static storage
+app.use('/images', express.static(path.join(process.cwd(), 'public', 'images')));
 
 // Home route
 app.get('/', (req, res) => {
@@ -47,6 +70,8 @@ app.get('/redoc', redoc({
 app.get('/swagger.json', (req, res) => {
   res.json(openapiSpecification);
 });
+
+runPaymentExpirationScheduler();
 
 app.use((req, res) => {
   res.status(404).json({

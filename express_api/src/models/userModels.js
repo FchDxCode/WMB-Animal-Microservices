@@ -2,6 +2,8 @@ import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js'; 
 import { Op } from 'sequelize';
 
+// relasi import
+import {AlamatUser} from './alamatUserModels.js';
 
 // Model User
 const User = sequelize.define(
@@ -105,6 +107,7 @@ const GambarUser = sequelize.define(
 // Relasi
 User.hasMany(GambarUser, { foreignKey: 'users_id', as: 'gambar' });
 GambarUser.belongsTo(User, { foreignKey: 'users_id', as: 'user' });
+User.hasMany(AlamatUser, { foreignKey: 'user_id', as: 'alamat' });
 
 // Ekspor model
 export { User, GambarUser };
