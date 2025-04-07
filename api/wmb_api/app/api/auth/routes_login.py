@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.config.database import get_db
 from app.schemas import user_schemas
 from app.models import user_models
-from app.utils.utils_users import verify_password, create_access_token, send_otp_email, generate_otp
+from app.utils.users_utils import verify_password, create_access_token, send_otp_email, generate_otp
 from app.config.config import get_settings
 from datetime import datetime, timedelta
 import logging
