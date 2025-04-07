@@ -27,7 +27,7 @@ const HewanPeliharaan = sequelize.define(
       allowNull: false,
     },
     jenis_ras: {
-      type: DataTypes.STRING(255),
+      type: DataTypes.BIGINT,
       allowNull: true,
     },
     tanggal_lahir_hewan: {
@@ -38,7 +38,6 @@ const HewanPeliharaan = sequelize.define(
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
       defaultValue: 0,
-      comment: 'Maksimum 4 kg',
     },
     created_at: {
       type: DataTypes.DATE,
@@ -93,8 +92,77 @@ const GambarHewan = sequelize.define(
   }
 );
 
+
+// Model jenis_hewan
+const JenisHewan = sequelize.define(
+  'JenisHewan',
+  {
+    id: {
+      type: DataTypes.BIGINT,
+      autoIncrement: true,
+      primaryKey: true,
+    },
+    jenis_hewan_peliharaan: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+    },
+    created_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: DataTypes.NOW,
+    },
+    updated_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: DataTypes.NOW,
+    },
+  },
+  {
+    tableName: 'jenis_hewan',
+    timestamps: true,
+    underscored: true,
+  }
+)
+
+// Model ras_hewan
+const RasHewan = sequelize.define(
+  'RasHewan',
+  {
+    id: {
+      type: DataTypes.BIGINT,
+      autoIncrement: true,
+      primaryKey: true,
+    },
+    jenis_hewan_id: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: false,
+    },
+    nama_ras_hewan: {
+      type: DataTypes.STRING(255),
+      allowNull: false,
+    },
+    created_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: DataTypes.NOW,
+    },
+    updated_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: DataTypes.NOW,
+    },
+  },
+  {
+    tableName: 'ras_hewan',
+    timestamps: true,
+    underscored: true,
+  }
+);
+
 // Relasi
 HewanPeliharaan.hasMany(GambarHewan, { foreignKey: 'hewan_peliharaan_id', as: 'gambar' });
 GambarHewan.belongsTo(HewanPeliharaan, { foreignKey: 'hewan_peliharaan_id', as: 'hewan' });
+RasHewan.belongsTo(JenisHewan, { foreignKey: 'jenis_hewan_id', as: 'jenis' });
+JenisHewan.hasMany(RasHewan, { foreignKey: 'jenis_hewan_id', as: 'rasHewan' });
 
-export { HewanPeliharaan, GambarHewan };
+export { HewanPeliharaan, GambarHewan, RasHewan, JenisHewan };

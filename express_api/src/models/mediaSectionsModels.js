@@ -8,6 +8,10 @@ const GambarMediaSection = sequelize.define('GambarMediaSection', {
     primaryKey: true,
     autoIncrement: true,
   },
+  media_sections_id: {
+    type: DataTypes.BIGINT,
+    allowNull: false,
+  },
   gambar_media: {
     type: DataTypes.STRING,
   },
@@ -42,10 +46,6 @@ const MediaSection = sequelize.define('MediaSection', {
   deskripsi: {
     type: DataTypes.TEXT,
   },
-  gambar_media_id: {
-    type: DataTypes.BIGINT,
-    allowNull: false,
-  },
   is_active: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
@@ -66,7 +66,7 @@ const MediaSection = sequelize.define('MediaSection', {
 });
 
 // Relasi
-MediaSection.belongsTo(GambarMediaSection, { foreignKey: 'gambarMediaId', as: 'gambarMedia' });
-GambarMediaSection.hasMany(MediaSection, { foreignKey: 'gambarMediaId', as: 'mediaSections' }); 
+MediaSection.hasMany(GambarMediaSection, {foreignKey: 'media_sections_id',as: 'gambarMedia', });
+GambarMediaSection.belongsTo(MediaSection, {foreignKey: 'media_sections_id', as: 'mediaSection', });
 
 export { GambarMediaSection, MediaSection };
