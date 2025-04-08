@@ -14,6 +14,7 @@ export const uploadPaths = {
   artikelImages: path.join(process.cwd(), BASE_STORAGE_PATH, 'artikel-images'),
   mediaSections: path.join(process.cwd(), BASE_STORAGE_PATH, 'media-sections'),
   configImages: path.join(process.cwd(), BASE_STORAGE_PATH, 'config-images'),
+  productImages: path.join(process.cwd(), BASE_STORAGE_PATH, 'product-images'),
 };
 
 // Buat direktori jika belum ada
@@ -90,6 +91,18 @@ export const uploadConfig = {
         cb(new Error('Invalid file type. Only JPEG, PNG, GIF and ICO are allowed.'));
       }
     }
+  },
+  productImage: {
+    storage: createStorage(uploadPaths.productImages),
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    fileFilter: (req, file, cb) => {
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+      if (allowedTypes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Invalid file type. Only JPEG, PNG and GIF are allowed.'));
+      }
+    }
   }
 };
 
@@ -105,5 +118,6 @@ export const uploadFolders = {
   petImages: 'pet-images',
   artikelImages: 'artikel-images',
   mediaSections: 'media-sections',
-  configImages: 'config-images'
+  configImages: 'config-images',
+  productImages: 'product-images'
 };

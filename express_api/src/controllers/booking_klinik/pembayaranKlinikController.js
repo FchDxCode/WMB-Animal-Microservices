@@ -4,8 +4,10 @@ import { Klinik, LayananKlinik } from '../../models/klinikModels.js';
 import { calculateCoin } from '../../utils/coinCalculatorUtils.js';
 import { uploadBuktiTransfer, createBuktiTransferUrl } from '../../utils/uploadBuktiTransferUtils.js';
 import { StatusHistory } from '../../models/historyModels.js';
-import { ConfigPembayaran } from '../../models/configPembayaranModels.js'; // Import model ConfigPembayaran
+import { ConfigPembayaran } from '../../models/configPembayaranModels.js'; 
 import { CoinService } from '../../services/coin/coinServices.js';
+import { HistoryLayanan } from '../../models/historyModels.js';
+import sequelize from '../../config/db.js';
 
 /**
  * Controller untuk membuat pembayaran
@@ -401,6 +403,8 @@ export const updateStatusPembayaran = async (req, res) => {
  * Controller untuk admin mengupdate status pembayaran
  */
 export const adminUpdateStatusPembayaran = async (req, res) => {
+  const transaction = await sequelize.transaction(); // Tambahkan transaction
+
   try {
     const { id } = req.params;
     const { status, status_history_slug } = req.body;
@@ -419,10 +423,12 @@ export const adminUpdateStatusPembayaran = async (req, res) => {
             }
           ]
         }
-      ]
+      ],
+      transaction
     });
     
     if (!pembayaran) {
+      await transaction.rollback();
       return res.status(404).json({
         success: false,
         message: 'Pembayaran tidak ditemukan'
@@ -431,10 +437,12 @@ export const adminUpdateStatusPembayaran = async (req, res) => {
 
     // Dapatkan status history berdasarkan slug
     const statusHistory = await StatusHistory.findOne({
-      where: { slug: status_history_slug }
+      where: { slug: status_history_slug },
+      transaction
     });
     
     if (!statusHistory) {
+      await transaction.rollback();
       return res.status(404).json({
         success: false,
         message: 'Status history tidak ditemukan'
@@ -448,10 +456,30 @@ export const adminUpdateStatusPembayaran = async (req, res) => {
     await pembayaran.update({
       status,
       kategori_status_history_id: statusHistory.id
+    }, { transaction });
+
+    // Update status di history_layanan
+    const historyLayanan = await HistoryLayanan.findOne({
+      where: {
+        pembayaran_klinik_id: id
+      },
+      transaction
     });
 
+    if (historyLayanan) {
+      await historyLayanan.update({
+        status_history_id: statusHistory.id
+      }, { transaction });
+    } else {
+      // Jika belum ada record di history_layanan, buat baru
+      await HistoryLayanan.create({
+        pembayaran_klinik_id: id,
+        status_history_id: statusHistory.id,
+        user_id: pembayaran.checkout.booking.user_id
+      }, { transaction });
+    }
+
     // Jika status berubah menjadi 'selesai' dan sebelumnya bukan 'selesai'
-    // Tambahkan koin ke user (tanpa memeriksa status_history)
     if (status === 'selesai' && statusSebelumnya !== 'selesai') {
       const userId = pembayaran.checkout.booking.user_id;
       const coinAmount = pembayaran.koin_didapat;
@@ -460,7 +488,7 @@ export const adminUpdateStatusPembayaran = async (req, res) => {
         await CoinService.addCoinsAfterPayment(userId, coinAmount, {
           id: pembayaran.id,
           type: 'klinik'
-        });
+        }, transaction); // Tambahkan transaction ke service
       } catch (coinError) {
         console.error('Error adding coins:', coinError);
         // Tetap lanjutkan proses meski gagal menambah koin
@@ -481,12 +509,16 @@ export const adminUpdateStatusPembayaran = async (req, res) => {
             }
           ]
         }
-      ]
+      ],
+      transaction
     });
+
+    // Commit transaction jika semua berhasil
+    await transaction.commit();
     
     return res.status(200).json({
       success: true,
-      message: 'Status pembayaran berhasil diupdate',
+      message: 'Status pembayaran dan history berhasil diupdate',
       data: {
         id: updatedPembayaran.id,
         metode_pembayaran: updatedPembayaran.metode_pembayaran,
@@ -508,6 +540,8 @@ export const adminUpdateStatusPembayaran = async (req, res) => {
       }
     });
   } catch (error) {
+    // Rollback transaction jika terjadi error
+    await transaction.rollback();
     console.error('Error in adminUpdateStatusPembayaran:', error);
     return res.status(500).json({
       success: false,

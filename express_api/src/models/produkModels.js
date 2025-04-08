@@ -2,7 +2,9 @@
 
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js';
+import KeranjangProduk from './keranjangProdukModels.js';
 
+// Model Kategori Produk
 const KategoriProduk = sequelize.define('KategoriProduk', {
   id: {
     type: DataTypes.BIGINT,
@@ -31,6 +33,7 @@ const KategoriProduk = sequelize.define('KategoriProduk', {
   underscored: true,
 });
 
+// Model Produk
 const Produk = sequelize.define('Produk', {
   id: {
     type: DataTypes.BIGINT,
@@ -70,6 +73,10 @@ const Produk = sequelize.define('Produk', {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true,
   },
+  berat_produk :{
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
   stok_produk: {
     type: DataTypes.INTEGER,
     allowNull: false,
@@ -92,6 +99,7 @@ const Produk = sequelize.define('Produk', {
   underscored: true,
 });
 
+// Model Gambar Produk
 const GambarProduk = sequelize.define('GambarProduk', {
   id: {
     type: DataTypes.BIGINT,
@@ -127,5 +135,8 @@ KategoriProduk.hasMany(Produk, { foreignKey: 'kategori_produk_id', as: 'produk' 
 // Relasi antara Produk dan GambarProduk
 Produk.hasMany(GambarProduk, { foreignKey: 'produk_id', as: 'gambar_produk' });
 GambarProduk.belongsTo(Produk, { foreignKey: 'produk_id', as: 'produk' });
+
+Produk.hasMany(KeranjangProduk, { foreignKey: 'produk_id', as: 'keranjang_items' });
+KeranjangProduk.belongsTo(Produk, { foreignKey: 'produk_id', as: 'produk' });
 
 export { KategoriProduk, Produk, GambarProduk };

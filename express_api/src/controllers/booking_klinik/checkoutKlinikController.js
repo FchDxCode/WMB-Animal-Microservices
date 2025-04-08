@@ -7,6 +7,7 @@ import { Klinik, LayananKlinik } from '../../models/klinikModels.js';
 import { generateInvoiceNumber } from '../../utils/invoiceGeneratorUtils.js';
 import sequelize  from '../../config/db.js';
 import { uploadFolders, createImageUrl } from '../../utils/uploadUtils.js';
+import { HistoryLayanan, StatusHistory } from '../../models/historyModels.js';
 
 /**
  * Controller untuk handle checkout booking klinik
@@ -151,11 +152,33 @@ export const checkoutBookingKlinik = async (req, res) => {
       invoice
     }, { transaction });
 
+    // Setelah checkout berhasil dibuat, tambahkan record ke history
+    const defaultStatus = await StatusHistory.findOne({
+      where: { slug: 'menunggu-pembayaran' }, // Sesuaikan dengan slug status awal
+      transaction
+    });
+
+    if (!defaultStatus) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: 'Status history default tidak ditemukan'
+      });
+    }
+
+    // Buat record history
+    const historyRecord = await HistoryLayanan.create({
+      pembayaran_klinik_id: null, // Akan diupdate setelah pembayaran dibuat
+      status_history_id: defaultStatus.id,
+      user_id: user_id,
+    }, { transaction });
+
     // Commit transaction jika semua berhasil
     await transaction.commit();
 
     // Dapatkan info layanan untuk response
     const layananKlinik = await LayananKlinik.findByPk(finalLayananKlinikId);
+    const totalHarga = configPembayaran.biaya_booking + (layananKlinik ? parseFloat(layananKlinik.harga_layanan) : 0);
 
     // Buat response
     return res.status(201).json({
@@ -171,8 +194,12 @@ export const checkoutBookingKlinik = async (req, res) => {
           alamat_klinik: klinik.alamat_klinik,
           tanggal_booking: booking.tanggal_booking,
           waktu_booking: booking.waktu_booking,
-          layanan: layananKlinik ? layananKlinik.nama_layanan : null
+          layanan: layananKlinik ? layananKlinik.nama_layanan : null,
+          harga_layanan: layananKlinik ? layananKlinik.harga_layanan : 0,
+          biaya_booking: configPembayaran.biaya_booking,
+          total_harga: totalHarga
         },
+        status: defaultStatus.nama,
         informasi_hewan: await Promise.all(keluhanResults.map(async (keluhan) => {
           const hewan = await HewanPeliharaan.findByPk(keluhan.hewan_peliharaan_id, {
             include: [{ association: 'gambar' }]
