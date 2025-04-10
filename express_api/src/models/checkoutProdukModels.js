@@ -1,7 +1,10 @@
-// checkoutProdukModels.js
+// models/checkoutProdukModels.js
 
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js';
+import { ConfigPembayaran } from './configPembayaranModels.js';
+import { AlamatUser } from './alamatUserModels.js';
+import { User } from './userModels.js';
 
 const EkspedisiData = sequelize.define('EkspedisiData', {
   id: {
@@ -37,6 +40,10 @@ const CheckoutProduk = sequelize.define('CheckoutProduk', {
     autoIncrement: true,
     primaryKey: true,
   },
+  user_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+  },
   alamat_id: {
     type: DataTypes.BIGINT.UNSIGNED,
     allowNull: false,
@@ -45,16 +52,12 @@ const CheckoutProduk = sequelize.define('CheckoutProduk', {
     type: DataTypes.BIGINT.UNSIGNED,
     allowNull: false,
   },
-  produk_id: {
-    type: DataTypes.BIGINT.UNSIGNED,
-    allowNull: false,
-  },
   config_pembayaran_id: {
     type: DataTypes.BIGINT.UNSIGNED,
     allowNull: false,
   },
-  metode_pembayaran: {
-    type: DataTypes.ENUM('whatsapp', 'transfer'),
+  payment_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
     allowNull: false,
   },
   total_pesanan: {
@@ -88,6 +91,56 @@ const CheckoutProduk = sequelize.define('CheckoutProduk', {
   },
 }, {
   tableName: 'checkout_produk',
+  timestamps: true,
+  underscored: true,
+});
+
+// CheckoutItem model
+const CheckoutItem = sequelize.define('CheckoutItem', {
+  id: {
+    type: DataTypes.BIGINT,
+    autoIncrement: true,
+    primaryKey: true,
+  },
+  checkout_produk_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+  },
+  produk_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+  },
+  stok_produk_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+  },
+  jumlah: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
+  harga_satuan: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
+  },
+  diskon_satuan: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    defaultValue: 0.00,
+  },
+  subtotal: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
+  },
+  created_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  updated_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+}, {
+  tableName: 'checkout_items',
   timestamps: true,
   underscored: true,
 });
@@ -150,4 +203,20 @@ EkspedisiData.hasMany(CheckoutProduk, { foreignKey: 'ekspedisi_id', as: 'checkou
 PembayaranProduk.belongsTo(CheckoutProduk, { foreignKey: 'checkout_produk_id', as: 'checkout' });
 CheckoutProduk.hasOne(PembayaranProduk, { foreignKey: 'checkout_produk_id', as: 'pembayaran' });
 
-export { EkspedisiData, CheckoutProduk, PembayaranProduk };
+// Relasi antara CheckoutProduk dan CheckoutItem
+CheckoutProduk.hasMany(CheckoutItem, { foreignKey: 'checkout_produk_id', as: 'items' });
+CheckoutItem.belongsTo(CheckoutProduk, { foreignKey: 'checkout_produk_id', as: 'checkout' });
+
+// Relasi antara ConfigPembayaran dan PembayaranProduk
+PembayaranProduk.belongsTo(ConfigPembayaran, { foreignKey: 'config_pembayaran_id', as: 'config_pembayaran' });
+ConfigPembayaran.hasMany(PembayaranProduk, { foreignKey: 'config_pembayaran_id', as: 'pembayaran_produk' });
+
+// Relasi antara CheckoutProduk dan AlamatUser
+CheckoutProduk.belongsTo(AlamatUser, { foreignKey: 'alamat_id', as: 'alamat' });
+AlamatUser.hasMany(CheckoutProduk, { foreignKey: 'alamat_id', as: 'checkout_produk' });
+
+// Relasi antara CheckoutProduk dan User
+CheckoutProduk.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+User.hasMany(CheckoutProduk, { foreignKey: 'user_id', as: 'checkout_produk' });
+
+export { EkspedisiData, CheckoutProduk, PembayaranProduk, CheckoutItem };

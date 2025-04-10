@@ -8,6 +8,10 @@ const Klinik = sequelize.define('Klinik', {
     autoIncrement: true,
     primaryKey: true,
   },
+  dokter_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+  },
   nama_klinik: {
     type: DataTypes.STRING(255),
     allowNull: false,
@@ -31,6 +35,10 @@ const Klinik = sequelize.define('Klinik', {
   harga_konsultasi: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true,
+  },
+  waktu_konsultasi: {
+    type: DataTypes.DATE,
+    allowNull: false,
   },
   maps: {
     type: DataTypes.STRING(255),

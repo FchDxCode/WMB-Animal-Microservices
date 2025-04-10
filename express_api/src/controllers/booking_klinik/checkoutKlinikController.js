@@ -154,7 +154,7 @@ export const checkoutBookingKlinik = async (req, res) => {
 
     // Setelah checkout berhasil dibuat, tambahkan record ke history
     const defaultStatus = await StatusHistory.findOne({
-      where: { slug: 'menunggu-pembayaran' }, // Sesuaikan dengan slug status awal
+      where: { slug: 'belum-bayar' }, // Sesuaikan dengan slug status awal
       transaction
     });
 

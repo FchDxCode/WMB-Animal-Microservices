@@ -1,326 +1,161 @@
-import { AlamatUser, Provinsi, KabupatenKota, Kecamatan } from '../models/alamatUserModels.js';
-import { EkspedisiData, CheckoutProduk, PembayaranProduk } from '../models/checkoutProdukModels.js';
-import { CoinHistory, TotalCoinUser } from '../models/userCoinModels.js';
-import { ConfigPembayaran } from '../models/configPembayaranModels.js';
-import { KeranjangProduk } from '../models/keranjangProdukModels.js';
-import { Produk, GambarProduk } from '../models/produkModels.js';
-import sequelize from '../config/db.js';
-import { Op } from 'sequelize';
-import { v4 as uuidv4 } from 'uuid';
+// controllers/checkout_produk/checkoutProdukController.js
+import { CheckoutProduk, CheckoutItem, PembayaranProduk, EkspedisiData } from '../../models/checkoutProdukModels.js';
+import KeranjangProduk from '../../models/keranjangProdukModels.js';
+import { Produk } from '../../models/produkModels.js';
+import { AlamatUser } from '../../models/alamatUserModels.js';
+import { TotalCoinUser, CoinHistory } from '../../models/userCoinModels.js';
+import { ConfigPembayaran } from '../../models/configPembayaranModels.js';
+import { generateInvoiceNumber } from '../../utils/invoiceGeneratorUtils.js';
+import { calculateCoin } from '../../utils/coinCalculatorUtils.js';
+import sequelize from '../../config/db.js';
+import { StatusHistory, HistoryLayanan } from '../../models/historyModels.js';
 
-// Helper function untuk generate invoice number
-const generateInvoiceNumber = () => {
-  const date = new Date();
-  const year = date.getFullYear().toString().substr(-2);
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-  
-  return `INV/${year}${month}${day}/${random}`;
-};
-
-// Get alamat user
-export const getAlamatUser = async (req, res) => {
+/**
+ * Mendapatkan data untuk tampilan halaman checkout
+ * @param {object} req - Request Express
+ * @param {object} res - Response Express
+ */
+export const getCheckoutData = async (req, res) => {
   try {
     const userId = req.user.id;
     
-    const alamatList = await AlamatUser.findAll({
-      where: { user_id: userId },
-      include: [
-        { model: Provinsi, as: 'provinsi' },
-        { model: KabupatenKota, as: 'kabupatenKota' },
-        { model: Kecamatan, as: 'kecamatan' }
-      ],
-      order: [['created_at', 'DESC']]
-    });
-    
-    if (alamatList.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Alamat belum ditambahkan, silakan tambahkan alamat terlebih dahulu'
-      });
-    }
-    
-    return res.status(200).json({
-      success: true,
-      data: alamatList
-    });
-  } catch (error) {
-    console.error('Error mendapatkan alamat user:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Terjadi kesalahan saat mengambil data alamat',
-      error: error.message
-    });
-  }
-};
-
-// Get ekspedisi
-export const getEkspedisi = async (req, res) => {
-  try {
-    const ekspedisiList = await EkspedisiData.findAll({
-      order: [['nama_ekspedisi', 'ASC']]
-    });
-    
-    if (ekspedisiList.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Data ekspedisi tidak ditemukan'
-      });
-    }
-    
-    return res.status(200).json({
-      success: true,
-      data: ekspedisiList
-    });
-  } catch (error) {
-    console.error('Error mendapatkan ekspedisi:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Terjadi kesalahan saat mengambil data ekspedisi',
-      error: error.message
-    });
-  }
-};
-
-// Checkout kalkulasi
-export const checkoutCalculation = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { alamat_id, ekspedisi_id, use_coin } = req.body;
-    
-    // Validasi input
-    if (!alamat_id || !ekspedisi_id) {
-      return res.status(400).json({
-        success: false,
-        message: 'Alamat dan ekspedisi harus dipilih'
-      });
-    }
-    
-    // Cek alamat
-    const alamat = await AlamatUser.findOne({
-      where: { id: alamat_id, user_id: userId },
-      include: [
-        { model: Provinsi, as: 'provinsi' },
-        { model: KabupatenKota, as: 'kabupatenKota' },
-        { model: Kecamatan, as: 'kecamatan' }
-      ]
-    });
-    
-    if (!alamat) {
-      return res.status(404).json({
-        success: false,
-        message: 'Alamat tidak ditemukan'
-      });
-    }
-    
-    // Cek ekspedisi
-    const ekspedisi = await EkspedisiData.findByPk(ekspedisi_id);
-    if (!ekspedisi) {
-      return res.status(404).json({
-        success: false,
-        message: 'Ekspedisi tidak ditemukan'
-      });
-    }
-    
-    // Ambil config pembayaran
-    const configPembayaran = await ConfigPembayaran.findOne({
-      order: [['created_at', 'DESC']]
-    });
-    
-    if (!configPembayaran) {
-      return res.status(404).json({
-        success: false,
-        message: 'Konfigurasi pembayaran tidak ditemukan'
-      });
-    }
-    
-    // Ambil produk dari keranjang
-    const keranjangItems = await KeranjangProduk.findAll({
+    // Ambil keranjang pengguna
+    const cartItems = await KeranjangProduk.findAll({
       where: { user_id: userId },
       include: [
         {
           model: Produk,
           as: 'produk',
-          include: [
-            {
-              model: GambarProduk,
-              as: 'gambar_produk',
-              attributes: ['id', 'gambar'],
-              limit: 1
-            }
-          ]
+          attributes: ['id', 'nama_produk', 'harga_produk', 'diskon_produk', 'berat_produk']
         }
       ]
     });
     
-    if (keranjangItems.length === 0) {
-      return res.status(404).json({
+    if (cartItems.length === 0) {
+      return res.status(400).json({
         success: false,
-        message: 'Keranjang kosong, tidak ada produk untuk di-checkout'
+        message: 'Keranjang belanja kosong'
       });
     }
     
-    // Kalkulasi subtotal produk
-    let totalBeratProduk = 0;
-    let subtotalProduk = 0;
-    let totalItems = 0;
-    
-    const produkItems = keranjangItems.map(item => {
-      const hargaSetelahDiskon = item.produk.diskon_produk 
-        ? item.produk.harga_produk - item.produk.diskon_produk 
-        : item.produk.harga_produk;
-      
-      totalBeratProduk += (item.produk.berat || 0) * item.jumlah_dibeli;
-      subtotalProduk += parseFloat(item.subtotal_harga);
-      totalItems += item.jumlah_dibeli;
-      
-      return {
-        id: item.id,
-        produk_id: item.produk_id,
-        stok_produk_id: item.stok_produk_id,
-        nama_produk: item.produk.nama_produk,
-        harga_satuan: item.produk.harga_produk,
-        diskon_satuan: item.produk.diskon_produk || 0,
-        harga_setelah_diskon: hargaSetelahDiskon,
-        jumlah: item.jumlah_dibeli,
-        subtotal: item.subtotal_harga,
-        gambar: item.produk.gambar_produk.length > 0 
-          ? item.produk.gambar_produk[0].gambar 
-          : null
-      };
+    // Ambil alamat pengguna
+    const addresses = await AlamatUser.findAll({
+      where: { user_id: userId },
+      attributes: ['id', 'nama_lengkap', 'no_tlpn', 'detail_alamat', 'kode_pos']
     });
     
-    // Hitung ongkir
-    const ongkir = parseFloat(ekspedisi.ongkir);
+    // Ambil ekspedisi yang tersedia
+    const ekspedisi = await EkspedisiData.findAll({
+      attributes: ['id', 'nama_ekspedisi', 'ongkir']
+    });
     
-    // Hitung biaya admin
-    const biayaAdmin = parseFloat(configPembayaran.biaya_admin);
+    // Ambil konfigurasi pembayaran
+    const configPembayaran = await ConfigPembayaran.findOne();
     
-    // Cek koin user
+    // Ambil total coin pengguna
     const userCoin = await TotalCoinUser.findOne({
       where: { user_id: userId }
     });
     
-    const totalCoin = userCoin ? parseFloat(userCoin.total_coin) : 0;
+    // Hitung subtotal
+    let subtotal = 0;
+    cartItems.forEach(item => {
+      const harga = item.produk.harga_produk;
+      const diskon = item.produk.diskon_produk || 0;
+      const hargaSetelahDiskon = harga - diskon;
+      subtotal += hargaSetelahDiskon * item.jumlah_dibeli;
+    });
     
-    // Hitung penggunaan koin
-    let koinDipakai = 0;
-    if (use_coin && totalCoin > 0) {
-      if (subtotalProduk < 20000) {
-        // Gunakan 1/2 dari koin yang dimiliki
-        koinDipakai = Math.min(totalCoin / 2, subtotalProduk);
-      } else {
-        // Gunakan maksimal 10.000 koin jika harga di atas 20.000
-        koinDipakai = Math.min(totalCoin, 10000, subtotalProduk);
-      }
-    }
-    
-    // Hitung total pesanan
-    const totalPesanan = subtotalProduk + ongkir + biayaAdmin - koinDipakai;
-    
-    // Hitung perkiraan koin yang akan didapat
-    const persentaseCoin = parseFloat(configPembayaran.persentase_coin) / 100;
-    const koinDidapat = Math.floor(subtotalProduk * persentaseCoin);
+    // Berapa maksimal coin yang bisa digunakan
+    const maxCoinUsable = configPembayaran ? 
+      Math.min(
+        userCoin ? userCoin.total_coin : 0,
+        subtotal * (configPembayaran.persentase_coin_digunakan / 100)
+      ) : 0;
     
     return res.status(200).json({
       success: true,
       data: {
-        alamat: {
-          id: alamat.id,
-          nama_lengkap: alamat.nama_lengkap,
-          no_tlpn: alamat.no_tlpn,
-          provinsi: alamat.provinsi.provinsi,
-          kabupaten_kota: alamat.kabupatenKota.nama_kabupaten_kota,
-          kecamatan: alamat.kecamatan.nama_kecamatan,
-          kode_pos: alamat.kode_pos,
-          detail_alamat: alamat.detail_alamat
-        },
-        ekspedisi: {
-          id: ekspedisi.id,
-          nama_ekspedisi: ekspedisi.nama_ekspedisi,
-          ongkir: ekspedisi.ongkir
-        },
-        produk_items: produkItems,
-        ringkasan_pesanan: {
-          total_items: totalItems,
-          total_berat: totalBeratProduk,
-          subtotal_produk: subtotalProduk,
-          ongkir: ongkir,
-          biaya_admin: biayaAdmin,
-          koin_dipakai: koinDipakai,
-          total_pesanan: totalPesanan,
-          koin_akan_didapat: koinDidapat
-        },
-        koin_tersedia: totalCoin,
-        config_pembayaran: {
-          id: configPembayaran.id,
-          biaya_admin: configPembayaran.biaya_admin,
-          persentase_coin: configPembayaran.persentase_coin,
-          no_rekening_admin: configPembayaran.no_rekening_admin
-        }
+        cartItems,
+        addresses,
+        ekspedisi,
+        subtotal,
+        userCoin: userCoin ? userCoin.total_coin : 0,
+        maxCoinUsable: Math.floor(maxCoinUsable),
+        biayaAdmin: configPembayaran ? configPembayaran.biaya_admin : 0
       }
     });
   } catch (error) {
-    console.error('Error kalkulasi checkout:', error);
+    console.error('Error getting checkout data:', error);
     return res.status(500).json({
       success: false,
-      message: 'Terjadi kesalahan saat kalkulasi checkout',
+      message: 'Terjadi kesalahan saat mengambil data checkout',
       error: error.message
     });
   }
 };
 
-// Proses checkout
+/**
+ * Proses checkout produk
+ * @param {object} req - Request Express
+ * @param {object} res - Response Express
+ */
 export const processCheckout = async (req, res) => {
-  const transaction = await sequelize.transaction();
+  const t = await sequelize.transaction();
   
   try {
     const userId = req.user.id;
-    const {
-      alamat_id,
-      ekspedisi_id,
-      use_coin,
-      metode_pembayaran,
-      item_ids // ID keranjang yang akan di-checkout
+    const { 
+      alamatId, 
+      ekspedisiId, 
+      metodePembayaranId, 
+      gunakanCoin
     } = req.body;
     
     // Validasi input
-    if (!alamat_id || !ekspedisi_id || !metode_pembayaran || !item_ids || !Array.isArray(item_ids) || item_ids.length === 0) {
-      await transaction.rollback();
+    if (!alamatId || !ekspedisiId || !metodePembayaranId) {
       return res.status(400).json({
         success: false,
-        message: 'Data checkout tidak lengkap'
+        message: 'Alamat, ekspedisi, dan metode pembayaran harus dipilih'
       });
     }
     
-    // Validasi metode pembayaran
-    if (!['whatsapp', 'transfer'].includes(metode_pembayaran)) {
-      await transaction.rollback();
-      return res.status(400).json({
-        success: false,
-        message: 'Metode pembayaran tidak valid'
-      });
-    }
-    
-    // Cek alamat
-    const alamat = await AlamatUser.findOne({
-      where: { id: alamat_id, user_id: userId },
-      transaction
+    // Ambil keranjang pengguna
+    const cartItems = await KeranjangProduk.findAll({
+      where: { user_id: userId },
+      include: [
+        {
+          model: Produk,
+          as: 'produk',
+          attributes: ['id', 'nama_produk', 'harga_produk', 'diskon_produk', 'stok_produk']
+        }
+      ],
+      transaction: t
     });
     
-    if (!alamat) {
-      await transaction.rollback();
-      return res.status(404).json({
+    if (cartItems.length === 0) {
+      await t.rollback();
+      return res.status(400).json({
         success: false,
-        message: 'Alamat tidak ditemukan'
+        message: 'Keranjang belanja kosong'
       });
     }
     
-    // Cek ekspedisi
-    const ekspedisi = await EkspedisiData.findByPk(ekspedisi_id, { transaction });
+    // Verifikasi stok produk cukup
+    for (const item of cartItems) {
+      if (item.jumlah_dibeli > item.produk.stok_produk) {
+        await t.rollback();
+        return res.status(400).json({
+          success: false,
+          message: `Stok produk ${item.produk.nama_produk} tidak mencukupi`
+        });
+      }
+    }
+    
+    // Ambil ekspedisi
+    const ekspedisi = await EkspedisiData.findByPk(ekspedisiId, { transaction: t });
     if (!ekspedisi) {
-      await transaction.rollback();
+      await t.rollback();
       return res.status(404).json({
         success: false,
         message: 'Ekspedisi tidak ditemukan'
@@ -328,161 +163,152 @@ export const processCheckout = async (req, res) => {
     }
     
     // Ambil config pembayaran
-    const configPembayaran = await ConfigPembayaran.findOne({
-      order: [['created_at', 'DESC']],
-      transaction
-    });
-    
+    const configPembayaran = await ConfigPembayaran.findOne({ transaction: t });
     if (!configPembayaran) {
-      await transaction.rollback();
+      await t.rollback();
       return res.status(404).json({
         success: false,
         message: 'Konfigurasi pembayaran tidak ditemukan'
       });
     }
     
-    // Ambil produk dari keranjang
-    const keranjangItems = await KeranjangProduk.findAll({
-      where: { 
-        id: { [Op.in]: item_ids },
-        user_id: userId
-      },
-      include: [
-        {
-          model: Produk,
-          as: 'produk'
-        }
-      ],
-      transaction
+    // Hitung subtotal
+    let subtotal = 0;
+    cartItems.forEach(item => {
+      const harga = item.produk.harga_produk;
+      const diskon = item.produk.diskon_produk || 0;
+      const hargaSetelahDiskon = harga - diskon;
+      subtotal += hargaSetelahDiskon * item.jumlah_dibeli;
     });
     
-    if (keranjangItems.length === 0) {
-      await transaction.rollback();
-      return res.status(404).json({
-        success: false,
-        message: 'Produk tidak ditemukan di keranjang'
-      });
-    }
+    // Hitung ongkir dan total pesanan
+    const ongkir = Number(ekspedisi.ongkir) || 0;
+    const biayaAdmin = Number(configPembayaran.biaya_admin) || 0;
+    const subtotalNum = Number(subtotal) || 0;
+    const totalPesanan = subtotalNum + ongkir + biayaAdmin;
     
-    // Cek stok produk
-    for (const item of keranjangItems) {
-      if (item.produk.stok_produk < item.jumlah_dibeli) {
-        await transaction.rollback();
+    // Proses penggunaan coin
+    let finalCoinDigunakan = 0;
+
+    if (gunakanCoin) {
+      // Ambil total coin pengguna
+      const userCoin = await TotalCoinUser.findOne({
+        where: { user_id: userId },
+        transaction: t
+      });
+      
+      if (!userCoin || userCoin.total_coin <= 0) {
+        await t.rollback();
         return res.status(400).json({
           success: false,
-          message: `Stok produk ${item.produk.nama_produk} tidak mencukupi`
+          message: 'Anda tidak memiliki coin untuk digunakan'
         });
       }
       
-      // Kurangi stok produk
-      await Produk.update(
-        { stok_produk: item.produk.stok_produk - item.jumlah_dibeli },
-        { 
-          where: { id: item.produk_id },
-          transaction
-        }
-      );
-    }
-    
-    // Kalkulasi subtotal produk
-    let subtotalProduk = 0;
-    
-    keranjangItems.forEach(item => {
-      subtotalProduk += parseFloat(item.subtotal_harga);
-    });
-    
-    // Hitung ongkir
-    const ongkir = parseFloat(ekspedisi.ongkir);
-    
-    // Hitung biaya admin
-    const biayaAdmin = parseFloat(configPembayaran.biaya_admin);
-    
-    // Cek koin user
-    const userCoin = await TotalCoinUser.findOne({
-      where: { user_id: userId },
-      transaction
-    });
-    
-    const totalCoin = userCoin ? parseFloat(userCoin.total_coin) : 0;
-    
-    // Hitung penggunaan koin
-    let koinDipakai = 0;
-    if (use_coin && totalCoin > 0) {
-      if (subtotalProduk < 20000) {
-        // Gunakan 1/2 dari koin yang dimiliki
-        koinDipakai = Math.min(totalCoin / 2, subtotalProduk);
-      } else {
-        // Gunakan maksimal 10.000 koin jika harga di atas 20.000
-        koinDipakai = Math.min(totalCoin, 10000, subtotalProduk);
+      // Konversi semua ke number yang valid
+      const userTotalCoin = parseInt(userCoin.total_coin, 10) || 0;
+      const persentaseCoin = parseFloat(configPembayaran.persentase_coin_digunakan) || 0;
+      
+      // Hitung maksimal coin yang bisa digunakan (berdasarkan persentase)
+      const maxCoinUsable = Math.floor(totalPesanan * (persentaseCoin / 100));
+      
+      // Gunakan maksimal coin yang diperbolehkan
+      finalCoinDigunakan = Math.min(maxCoinUsable, userTotalCoin);
+      
+      console.log('Debug coin calculation:', {
+        totalPesanan, 
+        persentaseCoin,
+        maxCoinUsable,
+        userTotalCoin,
+        finalCoinDigunakan
+      });
+      
+      // Kurangi coin user hanya jika ada coin yang digunakan
+      if (finalCoinDigunakan > 0) {
+        await userCoin.update({
+          total_coin: userTotalCoin - finalCoinDigunakan
+        }, { transaction: t });
       }
     }
     
-    // Hitung total pesanan
-    const totalPesanan = subtotalProduk + ongkir + biayaAdmin - koinDipakai;
-    
-    // Generate invoice
+    // Generate nomor invoice
     const invoice = generateInvoiceNumber();
     
-    // Buat checkout
+    // Hitung total setelah coin digunakan
+    const totalAfterCoin = Math.max(0, totalPesanan - finalCoinDigunakan);
+    
+    // Buat checkout produk
     const checkout = await CheckoutProduk.create({
       user_id: userId,
-      alamat_id,
-      ekspedisi_id,
+      alamat_id: alamatId,
+      ekspedisi_id: ekspedisiId,
       config_pembayaran_id: configPembayaran.id,
-      metode_pembayaran,
-      total_pesanan: totalPesanan,
-      subtotal_produk: subtotalProduk,
-      invoice,
+      payment_id: metodePembayaranId,
+      total_pesanan: totalAfterCoin,
+      subtotal_produk: subtotalNum,
+      invoice: invoice,
       tanggal_checkout_produk: new Date(),
-      koin_digunakan: koinDipakai
-    }, { transaction });
+      koin_digunakan: finalCoinDigunakan
+    }, { transaction: t });
     
-    // Simpan detail checkout items
-    const checkoutItems = [];
-    for (const item of keranjangItems) {
-      const checkoutItem = await CheckoutItem.create({
+    // Buat checkout items
+    for (const item of cartItems) {
+      const harga = item.produk.harga_produk;
+      const diskon = item.produk.diskon_produk || 0;
+      const hargaSetelahDiskon = harga - diskon;
+      
+      await CheckoutItem.create({
         checkout_produk_id: checkout.id,
         produk_id: item.produk_id,
         stok_produk_id: item.stok_produk_id,
         jumlah: item.jumlah_dibeli,
-        harga_satuan: item.produk.harga_produk,
-        diskon_satuan: item.produk.diskon_produk || 0,
-        subtotal: item.subtotal_harga
-      }, { transaction });
-      
-      checkoutItems.push(checkoutItem);
+        harga_satuan: harga,
+        diskon_satuan: diskon,
+        subtotal: hargaSetelahDiskon * item.jumlah_dibeli
+      }, { transaction: t });
     }
     
-    // Buat pembayaran
+    // Buat record pembayaran dengan status tertunda
     const pembayaran = await PembayaranProduk.create({
       checkout_produk_id: checkout.id,
-      invoice,
+      invoice: invoice,
       config_pembayaran_id: configPembayaran.id,
       status: 'tertunda',
-      kategori_status_history_id: 1 // Asumsi 1 adalah status "Menunggu Pembayaran"
-    }, { transaction });
+      kategori_status_history_id: 1, // Asumsi 1 adalah ID untuk status 'menunggu pembayaran'
+      koin_didapat: 0 // Coin akan ditambahkan saat pembayaran selesai
+    }, { transaction: t });
     
-    // Jika menggunakan koin, reservasi koin (belum dikurangi)
-    if (koinDipakai > 0) {
-      await CoinHistory.create({
-        user_id: userId,
-        pembayaran_produk_id: pembayaran.id,
-        coin_di_gunakan: koinDipakai,
-        tanggal_digunakan: new Date(),
-        status_coin: 'reserved' // Status reservasi untuk diverifikasi nanti
-      }, { transaction });
-    }
-    
-    // Hapus produk dari keranjang
-    await KeranjangProduk.destroy({
-      where: { 
-        id: { [Op.in]: item_ids },
-        user_id: userId
-      },
-      transaction
+    // Tambahkan record ke history layanan
+    // Ambil status history untuk checkout
+    const statusHistory = await StatusHistory.findOne({
+      where: { slug: 'belum-bayar' }, // Sesuaikan dengan slug yang tersedia di tabel status_history
+      transaction: t
     });
     
-    await transaction.commit();
+    if (!statusHistory) {
+      await t.rollback();
+      return res.status(500).json({
+        success: false,
+        message: 'Status history tidak ditemukan'
+      });
+    }
+    
+    // Buat record history layanan
+    await HistoryLayanan.create({
+      pembayaran_produk_id: pembayaran.id,
+      status_history_id: statusHistory.id,
+      user_id: userId,
+      created_at: new Date(),
+      updated_at: new Date()
+    }, { transaction: t });
+    
+    // Hapus keranjang setelah checkout
+    await KeranjangProduk.destroy({
+      where: { user_id: userId },
+      transaction: t
+    });
+    
+    await t.commit();
     
     return res.status(201).json({
       success: true,
@@ -490,18 +316,16 @@ export const processCheckout = async (req, res) => {
       data: {
         checkout_id: checkout.id,
         pembayaran_id: pembayaran.id,
-        invoice,
-        total_pesanan: totalPesanan,
-        koin_digunakan: koinDipakai,
-        metode_pembayaran
+        invoice: invoice,
+        total_pesanan: totalAfterCoin
       }
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error('Error proses checkout:', error);
+    await t.rollback();
+    console.error('Error processing checkout:', error);
     return res.status(500).json({
       success: false,
-      message: 'Terjadi kesalahan saat proses checkout',
+      message: 'Terjadi kesalahan saat memproses checkout',
       error: error.message
     });
   }

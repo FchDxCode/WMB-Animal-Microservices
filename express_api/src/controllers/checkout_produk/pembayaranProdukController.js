@@ -1,80 +1,56 @@
-import { PembayaranProduk, CheckoutProduk, EkspedisiData } from '../models/checkoutProdukModels.js';
-import { CoinHistory, TotalCoinUser } from '../models/userCoinModels.js';
-import { AlamatUser, Provinsi, KabupatenKota, Kecamatan } from '../models/alamatUserModels.js';
-import { ConfigPembayaran } from '../models/configPembayaranModels.js';
-import { Produk, GambarProduk } from '../models/produkModels.js';
-import { CheckoutItem } from '../models/checkoutItemModels.js';
-import { User } from '../models/userModels.js';
-import sequelize from '../config/db.js';
-import path from 'path';
-import multer from 'multer';
-import fs from 'fs';
+// controllers/checkout_produk/pembayaranProdukController.js
+import { PembayaranProduk, CheckoutProduk, CheckoutItem } from '../../models/checkoutProdukModels.js';
+import { Produk } from '../../models/produkModels.js';
+import { TotalCoinUser, CoinHistory } from '../../models/userCoinModels.js';
+import { ConfigPembayaran } from '../../models/configPembayaranModels.js';
+import { uploadBuktiTransfer, createBuktiTransferUrl } from '../../utils/uploadBuktiTransferUtils.js';
+import { calculateCoin } from '../../utils/coinCalculatorUtils.js';
+import { reduceProductStock } from '../../utils/productStokManagerUtils.js';
+import sequelize from '../../config/db.js';
+import { Op } from 'sequelize';
+import { StatusHistory, HistoryLayanan } from '../../models/historyModels.js';
 
-// Setup multer storage
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const dir = './uploads/bukti_pembayaran';
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    cb(null, dir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'payment-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const fileFilter = (req, file, cb) => {
-  // Izinkan hanya gambar
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
-  } else {
-    cb(new Error('Hanya file gambar yang diperbolehkan'), false);
-  }
-};
-
-export const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024 // Batasi ukuran file 5MB
-  },
-  fileFilter: fileFilter
-});
-
-// Get detail pembayaran
-export const getDetailPembayaran = async (req, res) => {
+/**
+ * Mendapatkan detail pembayaran
+ * @param {object} req - Request Express
+ * @param {object} res - Response Express
+ */
+export const getPaymentDetail = async (req, res) => {
   try {
-    const { invoice } = req.params;
-    const userId = req.user.id;
+    const { invoiceNumber } = req.params;
+    
+    if (!invoiceNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nomor invoice diperlukan'
+      });
+    }
     
     // Cari pembayaran berdasarkan invoice
     const pembayaran = await PembayaranProduk.findOne({
-      where: { invoice },
+      where: { invoice: invoiceNumber },
       include: [
         {
           model: CheckoutProduk,
           as: 'checkout',
-          where: { user_id: userId },
           include: [
             {
-              model: AlamatUser,
-              as: 'alamat',
+              model: CheckoutItem,
+              as: 'items',
               include: [
-                { model: Provinsi, as: 'provinsi' },
-                { model: KabupatenKota, as: 'kabupatenKota' },
-                { model: Kecamatan, as: 'kecamatan' }
+                {
+                  model: Produk,
+                  as: 'produk',
+                  attributes: ['nama_produk']
+                }
               ]
-            },
-            {
-              model: EkspedisiData,
-              as: 'ekspedisi'
-            },
-            {
-              model: ConfigPembayaran,
-              as: 'config_pembayaran'
             }
           ]
+        },
+        {
+          model: ConfigPembayaran,
+          as: 'config_pembayaran',
+          attributes: ['no_rekening_admin', 'biaya_admin']
         }
       ]
     });
@@ -82,97 +58,30 @@ export const getDetailPembayaran = async (req, res) => {
     if (!pembayaran) {
       return res.status(404).json({
         success: false,
-        message: 'Pembayaran tidak ditemukan'
+        message: 'Data pembayaran tidak ditemukan'
       });
     }
     
-    // Ambil detail produk di checkout
-    const checkoutItems = await CheckoutItem.findAll({
-      where: { checkout_produk_id: pembayaran.checkout.id },
-      include: [
-        {
-          model: Produk,
-          as: 'produk',
-          include: [
-            {
-              model: GambarProduk,
-              as: 'gambar_produk',
-              attributes: ['id', 'gambar'],
-              limit: 1
-            }
-          ]
-        }
-      ]
-    });
+    // Cek apakah pembayaran sudah expired (lebih dari 24 jam)
+    const createdAt = new Date(pembayaran.created_at);
+    const now = new Date();
+    const timeDiff = now - createdAt;
+    const hoursDiff = timeDiff / (1000 * 60 * 60);
     
-    // Format data untuk response
-    const formattedItems = checkoutItems.map(item => ({
-      id: item.id,
-      produk_id: item.produk_id,
-      nama_produk: item.produk.nama_produk,
-      harga_satuan: item.harga_satuan,
-      diskon_satuan: item.diskon_satuan,
-      jumlah: item.jumlah,
-      subtotal: item.subtotal,
-      gambar: item.produk.gambar_produk.length > 0 
-        ? item.produk.gambar_produk[0].gambar 
-        : null
-    }));
+    let isExpired = false;
+    if (hoursDiff > 24 && pembayaran.status === 'tertunda') {
+      isExpired = true;
+    }
     
-    // Hitung perkiraan koin yang akan didapat
-    const persentaseCoin = parseFloat(pembayaran.checkout.config_pembayaran.persentase_coin) / 100;
-    const koinDidapat = Math.floor(pembayaran.checkout.subtotal_produk * persentaseCoin);
-    
-    const response = {
+    return res.status(200).json({
       success: true,
       data: {
-        pembayaran: {
-          id: pembayaran.id,
-          invoice: pembayaran.invoice,
-          status: pembayaran.status,
-          bukti_pembayaran: pembayaran.bukti_pembayaran,
-          created_at: pembayaran.created_at
-        },
-        checkout: {
-          id: pembayaran.checkout.id,
-          metode_pembayaran: pembayaran.checkout.metode_pembayaran,
-          subtotal_produk: pembayaran.checkout.subtotal_produk,
-          total_pesanan: pembayaran.checkout.total_pesanan,
-          koin_digunakan: pembayaran.checkout.koin_digunakan,
-          tanggal_checkout: pembayaran.checkout.tanggal_checkout_produk
-        },
-        alamat: {
-          nama_lengkap: pembayaran.checkout.alamat.nama_lengkap,
-          no_tlpn: pembayaran.checkout.alamat.no_tlpn,
-          provinsi: pembayaran.checkout.alamat.provinsi.provinsi,
-          kabupaten_kota: pembayaran.checkout.alamat.kabupatenKota.nama_kabupaten_kota,
-          kecamatan: pembayaran.checkout.alamat.kecamatan.nama_kecamatan,
-          kode_pos: pembayaran.checkout.alamat.kode_pos,
-          detail_alamat: pembayaran.checkout.alamat.detail_alamat
-        },
-        ekspedisi: {
-          nama_ekspedisi: pembayaran.checkout.ekspedisi.nama_ekspedisi,
-          ongkir: pembayaran.checkout.ekspedisi.ongkir
-        },
-        config_pembayaran: {
-          biaya_admin: pembayaran.checkout.config_pembayaran.biaya_admin,
-          no_rekening_admin: pembayaran.checkout.config_pembayaran.no_rekening_admin
-        },
-        produk_items: formattedItems,
-        ringkasan_pesanan: {
-          subtotal_produk: pembayaran.checkout.subtotal_produk,
-          ongkir: pembayaran.checkout.ekspedisi.ongkir,
-          biaya_admin: pembayaran.checkout.config_pembayaran.biaya_admin,
-          koin_digunakan: pembayaran.checkout.koin_digunakan,
-          total_pesanan: pembayaran.checkout.total_pesanan,
-          koin_akan_didapat: koinDidapat
-        }
+        pembayaran,
+        isExpired
       }
-    };
-    
-    return res.status(200).json(response);
+    });
   } catch (error) {
-    console.error('Error mendapatkan detail pembayaran:', error);
+    console.error('Error getting payment detail:', error);
     return res.status(500).json({
       success: false,
       message: 'Terjadi kesalahan saat mengambil detail pembayaran',
@@ -181,63 +90,57 @@ export const getDetailPembayaran = async (req, res) => {
   }
 };
 
-// Upload bukti pembayaran
-export const uploadBuktiPembayaran = async (req, res) => {
+/**
+ * Upload bukti pembayaran
+ * @param {object} req - Request Express
+ * @param {object} res - Response Express
+ */
+export const uploadPaymentProof = async (req, res) => {
   try {
-    const { pembayaran_id } = req.params;
-    const userId = req.user.id;
+    const { id } = req.params;
+    const buktiTransfer = req.file;
     
-    if (!req.file) {
+    if (!buktiTransfer) {
       return res.status(400).json({
         success: false,
         message: 'Bukti pembayaran harus diunggah'
       });
     }
     
-    // Cek pembayaran
-    const pembayaran = await PembayaranProduk.findOne({
-      where: { id: pembayaran_id },
-      include: [
-        {
-          model: CheckoutProduk,
-          as: 'checkout',
-          where: { user_id: userId }
-        }
-      ]
-    });
+    const pembayaran = await PembayaranProduk.findByPk(id);
     
     if (!pembayaran) {
-      // Hapus file yang sudah diupload
-      fs.unlinkSync(req.file.path);
-      
       return res.status(404).json({
         success: false,
-        message: 'Pembayaran tidak ditemukan atau bukan milik Anda'
+        message: 'Data pembayaran tidak ditemukan'
       });
     }
     
     if (pembayaran.status !== 'tertunda') {
-      // Hapus file yang sudah diupload
-      fs.unlinkSync(req.file.path);
-      
       return res.status(400).json({
         success: false,
-        message: 'Pembayaran sudah diproses, tidak dapat mengunggah bukti pembayaran'
+        message: 'Pembayaran tidak dalam status tertunda'
       });
     }
     
-    // Hapus bukti pembayaran lama jika ada
-    if (pembayaran.bukti_pembayaran) {
-      const oldFilePath = path.join('./uploads/bukti_pembayaran', path.basename(pembayaran.bukti_pembayaran));
-      if (fs.existsSync(oldFilePath)) {
-        fs.unlinkSync(oldFilePath);
-      }
+    // Cek apakah pembayaran sudah expired (lebih dari 24 jam)
+    const createdAt = new Date(pembayaran.created_at);
+    const now = new Date();
+    const timeDiff = now - createdAt;
+    const hoursDiff = timeDiff / (1000 * 60 * 60);
+    
+    if (hoursDiff > 24) {
+      return res.status(400).json({
+        success: false,
+        message: 'Pembayaran sudah melewati batas waktu 24 jam'
+      });
     }
     
-    // Update pembayaran dengan bukti pembayaran baru
+    // Update data pembayaran dengan bukti transfer
+    const buktiTransferUrl = createBuktiTransferUrl(buktiTransfer.filename);
+    
     await pembayaran.update({
-      bukti_pembayaran: req.file.filename,
-      kategori_status_history_id: 2 // Asumsi 2 adalah status "Menunggu Verifikasi"
+      bukti_pembayaran: buktiTransferUrl
     });
     
     return res.status(200).json({
@@ -245,18 +148,11 @@ export const uploadBuktiPembayaran = async (req, res) => {
       message: 'Bukti pembayaran berhasil diunggah',
       data: {
         pembayaran_id: pembayaran.id,
-        invoice: pembayaran.invoice,
-        bukti_pembayaran: req.file.filename
+        bukti_pembayaran: buktiTransferUrl
       }
     });
   } catch (error) {
-    console.error('Error upload bukti pembayaran:', error);
-    
-    // Hapus file jika terjadi error
-    if (req.file) {
-      fs.unlinkSync(req.file.path);
-    }
-    
+    console.error('Error uploading payment proof:', error);
     return res.status(500).json({
       success: false,
       message: 'Terjadi kesalahan saat mengunggah bukti pembayaran',
@@ -265,298 +161,305 @@ export const uploadBuktiPembayaran = async (req, res) => {
   }
 };
 
-// Verifikasi pembayaran (untuk admin)
-export const verifikasiPembayaran = async (req, res) => {
-  const transaction = await sequelize.transaction();
+/**
+ * Update status pembayaran (untuk Admin)
+ * @param {object} req - Request Express
+ * @param {object} res - Response Express
+ */
+export const updatePaymentStatus = async (req, res) => {
+  const t = await sequelize.transaction();
   
   try {
-    const { pembayaran_id } = req.params;
+    const { id } = req.params;
     const { status, kategori_status_history_id } = req.body;
     
-    // Cek permission (hanya admin yang bisa)
-    if (req.user.role !== 'admin') {
-      await transaction.rollback();
-      return res.status(403).json({
-        success: false,
-        message: 'Tidak memiliki izin untuk melakukan verifikasi pembayaran'
-      });
-    }
-    
-    // Validasi input
-    if (!status || !['selesai', 'dibatalkan'].includes(status)) {
-      await transaction.rollback();
+    // Validasi status jika disediakan
+    if (status && !['selesai', 'dibatalkan'].includes(status)) {
+      await t.rollback();
       return res.status(400).json({
         success: false,
-        message: 'Status tidak valid'
+        message: 'Status harus berupa "selesai" atau "dibatalkan"'
       });
     }
     
-    if (!kategori_status_history_id) {
-      await transaction.rollback();
-      return res.status(400).json({
-        success: false,
-        message: 'Kategori status history harus diisi'
-      });
-    }
-    
-    // Cek pembayaran
-    const pembayaran = await PembayaranProduk.findOne({
-      where: { id: pembayaran_id },
+    const pembayaran = await PembayaranProduk.findByPk(id, {
       include: [
         {
           model: CheckoutProduk,
-          as: 'checkout'
+          as: 'checkout',
+          include: [
+            {
+              model: CheckoutItem,
+              as: 'items'
+            }
+          ]
         }
       ],
-      transaction
+      transaction: t
     });
     
     if (!pembayaran) {
-      await transaction.rollback();
+      await t.rollback();
       return res.status(404).json({
         success: false,
-        message: 'Pembayaran tidak ditemukan'
+        message: 'Data pembayaran tidak ditemukan'
       });
     }
     
-    if (pembayaran.status !== 'tertunda') {
-      await transaction.rollback();
+    // Ambil status history berdasarkan ID
+    const statusHistory = await StatusHistory.findByPk(kategori_status_history_id, { transaction: t });
+    
+    if (!statusHistory) {
+      await t.rollback();
+      return res.status(404).json({
+        success: false,
+        message: 'Status history tidak ditemukan'
+      });
+    }
+    
+    // Case 1: Jika status sudah "selesai" dan hanya ingin update kategori_status_history_id
+    if (pembayaran.status === 'selesai' && (!status || status === 'selesai')) {
+      await pembayaran.update({
+        kategori_status_history_id: kategori_status_history_id
+      }, { transaction: t });
+      
+      // Update status di history_layanan
+      await updateHistoryLayanan(pembayaran.id, kategori_status_history_id, pembayaran.checkout.user_id, t);
+      
+      await t.commit();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Kategori status history berhasil diperbarui',
+        data: {
+          pembayaran_id: pembayaran.id,
+          status: pembayaran.status,
+          kategori_status_history_id: kategori_status_history_id,
+          status_history_slug: statusHistory.slug
+        }
+      });
+    }
+    
+    // Case 2: Mencoba mengubah status yang sudah "selesai" menjadi status lain
+    if (pembayaran.status === 'selesai' && status === 'dibatalkan') {
+      await t.rollback();
       return res.status(400).json({
         success: false,
-        message: 'Pembayaran sudah diverifikasi sebelumnya'
+        message: 'Status pembayaran yang sudah "selesai" tidak dapat diubah menjadi "dibatalkan"'
       });
     }
     
-    // Update status pembayaran
-    await pembayaran.update({
-      status,
-      kategori_status_history_id
-    }, { transaction });
-    
-    const userId = pembayaran.checkout.user_id;
-    
-    // Jika status selesai, proses coin
-    if (status === 'selesai') {
-      // Hitung koin yang didapat
-      const configPembayaran = await ConfigPembayaran.findByPk(pembayaran.config_pembayaran_id, { transaction });
-      const persentaseCoin = parseFloat(configPembayaran.persentase_coin) / 100;
-      const koinDidapat = Math.floor(pembayaran.checkout.subtotal_produk * persentaseCoin);
-      
-      // Update pembayaran dengan koin yang didapat
+    // Case 3: Jika status "dibatalkan" dan ingin update kategori_status_history_id
+    if (pembayaran.status === 'dibatalkan' && (!status || status === 'dibatalkan')) {
       await pembayaran.update({
-        koin_didapat: koinDidapat
-      }, { transaction });
+        kategori_status_history_id: kategori_status_history_id
+      }, { transaction: t });
       
-      // Tambahkan koin yang didapat
-      if (koinDidapat > 0) {
-        await CoinHistory.create({
-          user_id: userId,
-          pembayaran_produk_id: pembayaran.id,
-          coin_di_dapat: koinDidapat,
-          tanggal_diperoleh: new Date()
-        }, { transaction });
+      // Update status di history_layanan
+      await updateHistoryLayanan(pembayaran.id, kategori_status_history_id, pembayaran.checkout.user_id, t);
+      
+      await t.commit();
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Kategori status history berhasil diperbarui',
+        data: {
+          pembayaran_id: pembayaran.id,
+          status: pembayaran.status,
+          kategori_status_history_id: kategori_status_history_id,
+          status_history_slug: statusHistory.slug
+        }
+      });
+    }
+    
+    // Case 4: Status "tertunda" yang ingin diubah ke status lain
+    if (pembayaran.status === 'tertunda') {
+      // Jika status menjadi "selesai"
+      if (status === 'selesai') {
+        // Ambil konfigurasi pembayaran untuk persentase coin
+        const configPembayaran = await ConfigPembayaran.findByPk(pembayaran.config_pembayaran_id, { transaction: t });
         
-        // Update total koin user
-        let userCoin = await TotalCoinUser.findOne({
-          where: { user_id: userId },
-          transaction
+        if (!configPembayaran) {
+          await t.rollback();
+          return res.status(404).json({
+            success: false,
+            message: 'Konfigurasi pembayaran tidak ditemukan'
+          });
+        }
+        
+        // Hitung coin yang akan didapat
+        const subtotalProduk = pembayaran.checkout.subtotal_produk;
+        const coinDidapat = calculateCoin(subtotalProduk, configPembayaran.persentase_coin);
+        
+        console.log('Debug Coin Calculation:', {
+          subtotalProduk,
+          persentaseCoin: configPembayaran.persentase_coin,
+          calculatedCoin: coinDidapat
         });
         
-        if (userCoin) {
-          await userCoin.update({
-            total_coin: sequelize.literal(`total_coin + ${koinDidapat}`)
-          }, { transaction });
+        // Update status pembayaran dan tambahkan coin didapat
+        await pembayaran.update({
+          status: status,
+          kategori_status_history_id: kategori_status_history_id,
+          koin_didapat: coinDidapat
+        }, { transaction: t });
+        
+        // Update status di history_layanan
+        await updateHistoryLayanan(pembayaran.id, kategori_status_history_id, pembayaran.checkout.user_id, t);
+        
+        // Tambahkan coin ke akun pengguna
+        const userId = pembayaran.checkout.user_id;
+        
+        // Cari atau buat total coin user
+        let totalCoinUser = await TotalCoinUser.findOne({
+          where: { user_id: userId },
+          transaction: t
+        });
+        
+        if (totalCoinUser) {
+          await totalCoinUser.update({
+            total_coin: sequelize.literal(`total_coin + ${coinDidapat}`)
+          }, { transaction: t });
         } else {
           await TotalCoinUser.create({
             user_id: userId,
-            total_coin: koinDidapat
-          }, { transaction });
+            total_coin: coinDidapat
+          }, { transaction: t });
         }
-      }
-      
-      // Gunakan koin yang direservasi
-      const koinDigunakan = parseFloat(pembayaran.checkout.koin_digunakan);
-      if (koinDigunakan > 0) {
-        // Cari coin history yang direservasi
-        const coinHistory = await CoinHistory.findOne({
-          where: {
-            pembayaran_produk_id: pembayaran.id,
-            user_id: userId,
-            status_coin: 'reserved'
-          },
-          transaction
-        });
         
-        if (coinHistory) {
-          // Update status coin menjadi used
-          await coinHistory.update({
-            status_coin: 'used'
-          }, { transaction });
+        // Tambahkan record coin history untuk coin yang didapat
+        await CoinHistory.create({
+          user_id: userId,
+          pembayaran_produk_id: pembayaran.id,
+          coin_di_dapat: coinDidapat,
+          tanggal_diperoleh: new Date()
+        }, { transaction: t });
+        
+        // Jika ada coin yang digunakan saat checkout, sekarang catat penggunaannya
+        const coinDigunakan = pembayaran.checkout.koin_digunakan;
+        if (coinDigunakan > 0) {
+          await CoinHistory.create({
+            user_id: userId,
+            pembayaran_produk_id: pembayaran.id,
+            coin_di_gunakan: coinDigunakan,
+            tanggal_digunakan: new Date()
+          }, { transaction: t });
           
-          // Kurangi total koin user
-          let userCoin = await TotalCoinUser.findOne({
+          console.log('Pencatatan penggunaan coin:', {
+            userId,
+            coinDigunakan,
+            pembayaranId: pembayaran.id
+          });
+        }
+        
+        // Kurangi stok produk
+        const checkoutItems = pembayaran.checkout.items;
+        for (const item of checkoutItems) {
+          const produk = await Produk.findByPk(item.produk_id, { transaction: t });
+          
+          if (produk) {
+            await produk.update({
+              stok_produk: Math.max(0, produk.stok_produk - item.jumlah)
+            }, { transaction: t });
+          }
+        }
+        
+        console.log('Coin berhasil ditambahkan:', {
+          userId,
+          coinDidapat,
+          pembayaranId: pembayaran.id
+        });
+      } 
+      // Jika status menjadi "dibatalkan"
+      else if (status === 'dibatalkan') {
+        // Update status pembayaran
+        await pembayaran.update({
+          status: status,
+          kategori_status_history_id: kategori_status_history_id,
+          koin_didapat: 0
+        }, { transaction: t });
+        
+        // Update status di history_layanan
+        await updateHistoryLayanan(pembayaran.id, kategori_status_history_id, pembayaran.checkout.user_id, t);
+        
+        // Kembalikan coin yang digunakan ke akun pengguna
+        const coinDigunakan = Number(pembayaran.checkout.koin_digunakan) || 0;
+        
+        if (coinDigunakan > 0) {
+          const userId = pembayaran.checkout.user_id;
+          
+          const totalCoinUser = await TotalCoinUser.findOne({
             where: { user_id: userId },
-            transaction
+            transaction: t
           });
           
-          if (userCoin) {
-            await userCoin.update({
-              total_coin: sequelize.literal(`total_coin - ${koinDigunakan}`)
-            }, { transaction });
+          if (totalCoinUser) {
+            await totalCoinUser.update({
+              total_coin: sequelize.literal(`total_coin + ${coinDigunakan}`)
+            }, { transaction: t });
+            
+            console.log('Coin dikembalikan karena pembatalan:', {
+              userId,
+              coinDigunakan,
+              pembayaranId: pembayaran.id
+            });
           }
         }
       }
-    } else if (status === 'dibatalkan') {
-      // Jika dibatalkan, kembalikan stok produk
-      const checkoutItems = await CheckoutItem.findAll({
-        where: { checkout_produk_id: pembayaran.checkout.id },
-        transaction
-      });
-      
-      for (const item of checkoutItems) {
-        await Produk.update(
-          { stok_produk: sequelize.literal(`stok_produk + ${item.jumlah}`) },
-          { 
-            where: { id: item.produk_id },
-            transaction
-          }
-        );
-      }
-      
-      // Hapus reservasi koin jika ada
-      await CoinHistory.destroy({
-        where: {
-          pembayaran_produk_id: pembayaran.id,
-          user_id: userId,
-          status_coin: 'reserved'
-        },
-        transaction
-      });
     }
     
-    await transaction.commit();
+    await t.commit();
     
     return res.status(200).json({
       success: true,
-      message: `Pembayaran berhasil diverifikasi dengan status "${status}"`,
+      message: status ? `Status pembayaran berhasil diubah menjadi ${status}` : 'Kategori status history berhasil diperbarui',
       data: {
         pembayaran_id: pembayaran.id,
-        invoice: pembayaran.invoice,
         status: pembayaran.status,
-        kategori_status_history_id: pembayaran.kategori_status_history_id,
-        koin_didapat: status === 'selesai' ? pembayaran.koin_didapat : 0
+        kategori_status_history_id: kategori_status_history_id,
+        status_history_slug: statusHistory.slug,
+        koin_didapat: pembayaran.koin_didapat
       }
     });
   } catch (error) {
-    await transaction.rollback();
-    console.error('Error verifikasi pembayaran:', error);
+    await t.rollback();
+    console.error('Error updating payment status:', error);
     return res.status(500).json({
       success: false,
-      message: 'Terjadi kesalahan saat verifikasi pembayaran',
+      message: 'Terjadi kesalahan saat mengupdate status pembayaran',
       error: error.message
     });
   }
 };
 
-// Daftar pembayaran user
-export const getUserPembayaran = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { status } = req.query;
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = (page - 1) * limit;
-    
-    // Buat where condition berdasarkan status jika ada
-    const whereCondition = status ? { status } : {};
-    
-    // Cari pembayaran user
-    const pembayaran = await PembayaranProduk.findAndCountAll({
-      where: whereCondition,
-      include: [
-        {
-          model: CheckoutProduk,
-          as: 'checkout',
-          where: { user_id: userId },
-          include: [
-            {
-              model: EkspedisiData,
-              as: 'ekspedisi'
-            }
-          ]
-        }
-      ],
-      order: [['created_at', 'DESC']],
-      limit,
-      offset,
-      distinct: true
-    });
-    
-    // Ambil checkout items untuk setiap pembayaran
-    const pembayaranList = await Promise.all(pembayaran.rows.map(async (item) => {
-      const checkoutItems = await CheckoutItem.findAll({
-        where: { checkout_produk_id: item.checkout.id },
-        include: [
-          {
-            model: Produk,
-            as: 'produk',
-            include: [
-              {
-                model: GambarProduk,
-                as: 'gambar_produk',
-                attributes: ['id', 'gambar'],
-                limit: 1
-              }
-            ]
-          }
-        ],
-        limit: 1 // Ambil 1 item saja untuk preview
-      });
-      
-      const totalItems = await CheckoutItem.count({
-        where: { checkout_produk_id: item.checkout.id }
-      });
-      
-      return {
-        id: item.id,
-        invoice: item.invoice,
-        status: item.status,
-        tanggal_pembelian: item.created_at,
-        total_pesanan: item.checkout.total_pesanan,
-        metode_pembayaran: item.checkout.metode_pembayaran,
-        ekspedisi: item.checkout.ekspedisi.nama_ekspedisi,
-        bukti_pembayaran: item.bukti_pembayaran,
-        koin_didapat: item.koin_didapat,
-        preview_item: checkoutItems.length > 0 ? {
-          nama_produk: checkoutItems[0].produk.nama_produk,
-          jumlah: checkoutItems[0].jumlah,
-          gambar: checkoutItems[0].produk.gambar_produk.length > 0 
-            ? checkoutItems[0].produk.gambar_produk[0].gambar 
-            : null,
-          total_items: totalItems,
-          more_items: totalItems > 1
-        } : null
-      };
-    }));
-    
-    return res.status(200).json({
-      success: true,
-      data: {
-        pembayaran: pembayaranList,
-        pagination: {
-          total_items: pembayaran.count,
-          total_pages: Math.ceil(pembayaran.count / limit),
-          current_page: page,
-          items_per_page: limit
-        }
-      }
-    });
-  } catch (error) {
-    console.error('Error mendapatkan daftar pembayaran user:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Terjadi kesalahan saat mengambil daftar pembayaran',
-      error: error.message
-    });
+/**
+ * Helper function untuk update atau buat record HistoryLayanan
+ * @param {number} pembayaranId - ID Pembayaran
+ * @param {number} statusHistoryId - ID Status History
+ * @param {number} userId - ID User
+ * @param {object} transaction - Transaction Sequelize
+ */
+async function updateHistoryLayanan(pembayaranId, statusHistoryId, userId, transaction) {
+  // Cek apakah sudah ada record di history_layanan
+  const historyLayanan = await HistoryLayanan.findOne({
+    where: { pembayaran_produk_id: pembayaranId },
+    transaction
+  });
+
+  if (historyLayanan) {
+    // Update record yang sudah ada
+    await historyLayanan.update({
+      status_history_id: statusHistoryId,
+      updated_at: new Date()
+    }, { transaction });
+  } else {
+    // Buat record baru jika belum ada
+    await HistoryLayanan.create({
+      pembayaran_produk_id: pembayaranId,
+      status_history_id: statusHistoryId,
+      user_id: userId,
+      created_at: new Date(),
+      updated_at: new Date()
+    }, { transaction });
   }
-};
+}

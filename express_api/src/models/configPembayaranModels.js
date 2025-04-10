@@ -28,6 +28,10 @@ const ConfigPembayaran = sequelize.define('ConfigPembayaran', {
     type: DataTypes.DECIMAL(5, 2),
     allowNull: false,
   },
+  persentase_coin_digunakan: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: false,
+  },
   created_at: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW,

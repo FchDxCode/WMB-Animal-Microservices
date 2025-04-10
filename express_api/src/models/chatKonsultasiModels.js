@@ -1,14 +1,15 @@
-// models/keranjangProdukModels.js
+// chatKonsultasiModels.js
+
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js';
 
-const KeranjangProduk = sequelize.define('KeranjangProduk', {
+const ChatKonsultasi = sequelize.define('ChatKonsultasi', {
   id: {
     type: DataTypes.BIGINT,
     autoIncrement: true,
     primaryKey: true,
   },
-  produk_id: {
+  konsultasi_online_id: {
     type: DataTypes.BIGINT.UNSIGNED,
     allowNull: false,
   },
@@ -16,18 +17,26 @@ const KeranjangProduk = sequelize.define('KeranjangProduk', {
     type: DataTypes.BIGINT.UNSIGNED,
     allowNull: false,
   },
-  stok_produk_id: {
+  dokter_id: {
     type: DataTypes.BIGINT.UNSIGNED,
     allowNull: false,
   },
-  jumlah_dibeli: {
-    type: DataTypes.BIGINT,
-    allowNull: true,
-    defaultValue: 0,
-  },
-  subtotal_harga: {
-    type: DataTypes.DECIMAL(10, 2),
+  pesan_konsultasi: {
+    type: DataTypes.TEXT,
     allowNull: false,
+  },
+  status_pesan_konsultasi: {
+    type: DataTypes.ENUM('terkirim', 'dibaca', 'dihapus'),
+    allowNull: false,
+    defaultValue: 'terkirim',
+  },
+  waktu_mulai_konsultasi: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  waktu_selesai_konsultasi: {
+    type: DataTypes.DATE,
+    allowNull: true,
   },
   created_at: {
     type: DataTypes.DATE,
@@ -38,9 +47,9 @@ const KeranjangProduk = sequelize.define('KeranjangProduk', {
     allowNull: true,
   },
 }, {
-  tableName: 'keranjang_produk',
+  tableName: 'chat_konsultasi',
   timestamps: true,
   underscored: true,
 });
 
-export default KeranjangProduk;
+export default ChatKonsultasi;

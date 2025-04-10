@@ -6,7 +6,7 @@
  * @returns {number} Jumlah koin yang didapat
  */
 export const calculateCoin = (totalBiaya, persentaseKoin) => {
-  // Pastikan persentaseKoin dalam bentuk desimal (misalnya, 0.1 untuk 10%)
+  
   const persentaseDesimal = persentaseKoin / 100;
   return Math.floor(totalBiaya * persentaseDesimal);
 };
