@@ -109,8 +109,8 @@ const PembayaranKlinik = sequelize.define('PembayaranKlinik', {
     type: DataTypes.BIGINT.UNSIGNED,
     allowNull: false,
   },
-  metode_pembayaran: {
-    type: DataTypes.ENUM('whatsapp', 'transfer'),
+  payment_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
     allowNull: false,
   },
   total_biaya: {

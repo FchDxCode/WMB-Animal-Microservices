@@ -443,7 +443,7 @@ router.post('/pembayaran/:id/bukti-transfer', authMiddleware, uploadBuktiTransfe
  *               status:
  *                 type: string
  *               status_history_slug:
- *                 type: string
+ *                 type: int
  *     responses:
  *       200:
  *         description: Status pembayaran berhasil diupdate

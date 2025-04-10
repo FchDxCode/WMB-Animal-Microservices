@@ -76,9 +76,9 @@ export const TotalCoinUser = sequelize.define('TotalCoinUser', {
     allowNull: false,
   },
   total_coin: {
-    type: DataTypes.DECIMAL(10, 2),
+    type: DataTypes.INTEGER,
     allowNull: false,
-    defaultValue: 0.00,
+    defaultValue: 0,
   },
   created_at: {
     type: DataTypes.DATE,

@@ -74,4 +74,15 @@ const HistoryLayanan = sequelize.define('HistoryLayanan', {
   underscored: true,
 });
 
+// Definisikan relasi
+HistoryLayanan.belongsTo(StatusHistory, {
+    foreignKey: 'status_history_id',
+    as: 'statusHistory', // Alias untuk relasi (opsional, tapi disarankan)
+  });
+  
+  StatusHistory.hasMany(HistoryLayanan, {
+    foreignKey: 'status_history_id',
+    as: 'layanan', // Alias untuk relasi (opsional, tapi disarankan)
+  });
+
 export { StatusHistory, HistoryLayanan };

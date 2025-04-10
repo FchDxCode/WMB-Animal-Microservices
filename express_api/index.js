@@ -19,8 +19,14 @@ import klinikRoutes from './src/routes/klinikRoutes.js';
 import bookingKlinikRoutes from './src/routes/bookingKlinikRoutes.js';
 import produkRoutes from './src/routes/produkRoutes.js';
 import coinUserRoutes from './src/routes/coinUserRoutes.js';
+import historyRoutes from './src/routes/historyRoutes.js';
 import mediaSectionsRoutes from './src/routes/mediaSectionsRoutes.js';
 import configWebsiteRoutes from './src/routes/configWebsiteRoutes.js';
+import keranjangProdukRoutes from './src/routes/keranjangProdukRoutes.js';
+import checkoutProdukRoutes from './src/routes/checkoutProdukRoutes.js';
+import googleAuthRoutes from './src/routes/googleAuthRoutes.js';
+import klinikKonsultasiRoutes from './src/routes/klinikKonsultasiRoutes.js';
+import klinikTerdekatRoutes from './src/routes/klinikTerdekatRoutes.js';
 
 dotenv.config();
 
@@ -40,16 +46,22 @@ const openapiSpecification = swaggerJSDoc(options);
 // Routes
 app.use('/api/auth', registerRoutes);
 app.use('/api/auth', loginRoutes);
+app.use('/api/auth', googleAuthRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/pets', petRoutes);
 app.use('/api/alamat', alamatUserRoutes);
 app.use('/api/artikel', artikelRoutes);
 app.use('/api/klinik', klinikRoutes);
 app.use('/api/booking-klinik', bookingKlinikRoutes);
+app.use('/api/history', historyRoutes);
 app.use('/api/produk', produkRoutes);
 app.use('/api/coin', coinUserRoutes);
 app.use('/api/media-sections', mediaSectionsRoutes);
 app.use('/api/config-website', configWebsiteRoutes);
+app.use('/api/keranjang', keranjangProdukRoutes);
+app.use('/api/checkout', checkoutProdukRoutes);
+app.use('/api/klinik-konsultasi', klinikKonsultasiRoutes);
+app.use('/api/klinik-terdekat', klinikTerdekatRoutes);
 
 // static storage
 app.use('/images', express.static(path.join(process.cwd(), 'public', 'images')));
