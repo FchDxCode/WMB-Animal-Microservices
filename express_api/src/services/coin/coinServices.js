@@ -1,4 +1,4 @@
-// services/coin/coinService.js
+// services/coin/coinServices.js
 import { TotalCoinUser, CoinHistory } from '../../models/userCoinModels.js';
 import sequelize from '../../config/db.js';
 

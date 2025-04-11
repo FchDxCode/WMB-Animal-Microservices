@@ -25,6 +25,11 @@ const Dokter = sequelize.define('Dokter', {
     type: DataTypes.STRING(255),
     allowNull: false,
   },
+  role_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+    defaultValue: 4,
+  },
   klinik_id: {
     type: DataTypes.BIGINT.UNSIGNED,
     allowNull: false,

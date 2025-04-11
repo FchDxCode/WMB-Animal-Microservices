@@ -2,6 +2,7 @@
 
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js';
+import ChatKonsultasi from './chatKonsultasiModels.js';
 
 const CheckoutKonsultasi = sequelize.define('CheckoutKonsultasi', {
   id: {
@@ -9,8 +10,28 @@ const CheckoutKonsultasi = sequelize.define('CheckoutKonsultasi', {
     autoIncrement: true,
     primaryKey: true,
   },
-  konsultasi_online_id: {
+  user_id: {
     type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+  },
+  dokter_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+  },
+  klinik_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+  },
+  hewan_peliharaan_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+  },
+  payment_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+  },
+  keluhan: {
+    type: DataTypes.TEXT,
     allowNull: false,
   },
   tanggal_checkout_konsultasi: {
@@ -32,11 +53,11 @@ const CheckoutKonsultasi = sequelize.define('CheckoutKonsultasi', {
     allowNull: false,
   },
   created_at: {
-    type: DataTypes.DATE,
+    type: DataTypes.TIMESTAMP,
     allowNull: true,
   },
   updated_at: {
-    type: DataTypes.DATE,
+    type: DataTypes.TIMESTAMP,
     allowNull: true,
   },
 }, {
@@ -90,5 +111,10 @@ const PembayaranKonsultasi = sequelize.define('PembayaranKonsultasi', {
 // Relasi antara PembayaranKonsultasi dan CheckoutKonsultasi
 PembayaranKonsultasi.belongsTo(CheckoutKonsultasi, { foreignKey: 'checkout_konsultasi_id', as: 'checkout' });
 CheckoutKonsultasi.hasOne(PembayaranKonsultasi, { foreignKey: 'checkout_konsultasi_id', as: 'pembayaran' });
+
+CheckoutKonsultasi.hasMany(ChatKonsultasi, { 
+  foreignKey: 'checkout_konsultasi_id', 
+  as: 'chatKonsultasi' 
+});
 
 export { CheckoutKonsultasi, PembayaranKonsultasi };

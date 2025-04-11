@@ -2,6 +2,7 @@
 
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js';
+import { CheckoutKonsultasi } from './bookingKonsultasiModels.js';
 
 const ChatKonsultasi = sequelize.define('ChatKonsultasi', {
   id: {
@@ -9,7 +10,7 @@ const ChatKonsultasi = sequelize.define('ChatKonsultasi', {
     autoIncrement: true,
     primaryKey: true,
   },
-  konsultasi_online_id: {
+  checkout_konsultasi_id: {
     type: DataTypes.BIGINT.UNSIGNED,
     allowNull: false,
   },
@@ -50,6 +51,11 @@ const ChatKonsultasi = sequelize.define('ChatKonsultasi', {
   tableName: 'chat_konsultasi',
   timestamps: true,
   underscored: true,
+});
+
+ChatKonsultasi.belongsTo(CheckoutKonsultasi, { 
+  foreignKey: 'checkout_konsultasi_id', 
+  as: 'checkoutKonsultasi' 
 });
 
 export default ChatKonsultasi;
