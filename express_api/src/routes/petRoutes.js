@@ -59,8 +59,8 @@ const handleMulterError = (err, req, res, next) => {
  *           enum: [jantan, betina, nonbinary]
  *           example: "jantan"
  *         jenis_ras:
- *           type: string
- *           example: "Persia"
+ *           type: bigint
+ *           example: 3
  *         tanggal_lahir_hewan:
  *           type: string
  *           format: date
@@ -239,8 +239,8 @@ router.get('/:id', getPetById);
  *                 enum: [jantan, betina, nonbinary]
  *                 example: "jantan"
  *               jenis_ras:
- *                 type: string
- *                 example: "Persia"
+ *                 type: bigint
+ *                 example: 2
  *               tanggal_lahir_hewan:
  *                 type: string
  *                 format: date
@@ -322,8 +322,8 @@ router.post('/', addPet);
  *                 enum: [jantan, betina, nonbinary]
  *                 example: "jantan"
  *               jenis_ras:
- *                 type: string
- *                 example: "Persia Mix"
+ *                 type: bigint
+ *                 example: 1
  *               tanggal_lahir_hewan:
  *                 type: string
  *                 format: date

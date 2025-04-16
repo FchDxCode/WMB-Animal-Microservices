@@ -1,6 +1,72 @@
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js';
 
+// === Model AlamatUser ===
+const AlamatUser = sequelize.define('AlamatUser', {
+  id: {
+    type: DataTypes.BIGINT,
+    autoIncrement: true,
+    primaryKey: true,
+  },
+  user_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+  },
+  nama_lengkap: {
+    type: DataTypes.STRING(255),
+    allowNull: false,
+  },
+  no_tlpn: {
+    type: DataTypes.STRING(255),
+    allowNull: false,
+  },
+  provinsi_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+  },
+  kabupaten_kota_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+  },
+  kecamatan_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+  },
+  kode_pos: {
+    type: DataTypes.STRING(255),
+    allowNull: false,
+  },
+  maps: {
+    type: DataTypes.STRING(255),
+    allowNull: false,
+  },
+  detail_alamat: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+  },
+  latitude: {
+    type: DataTypes.DECIMAL(10, 8),
+    allowNull: true,
+  },
+  longitude: {
+    type: DataTypes.DECIMAL(11, 8),
+    allowNull: true,
+  },
+  created_at: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW,
+  },
+  updated_at: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW,
+  },
+}, {
+  tableName: 'alamat_user',
+  timestamps: true,
+  underscored: true,
+});
+
+
 // === Model Provinsi ===
 const Provinsi = sequelize.define('Provinsi', {
   id: {
@@ -80,71 +146,6 @@ const Kecamatan = sequelize.define('Kecamatan', {
   },
 }, {
   tableName: 'kecamatan',
-  timestamps: true,
-  underscored: true,
-});
-
-// === Model AlamatUser ===
-const AlamatUser = sequelize.define('AlamatUser', {
-  id: {
-    type: DataTypes.BIGINT,
-    autoIncrement: true,
-    primaryKey: true,
-  },
-  user_id: {
-    type: DataTypes.BIGINT.UNSIGNED,
-    allowNull: false,
-  },
-  nama_lengkap: {
-    type: DataTypes.STRING(255),
-    allowNull: false,
-  },
-  no_tlpn: {
-    type: DataTypes.STRING(255),
-    allowNull: false,
-  },
-  provinsi_id: {
-    type: DataTypes.BIGINT.UNSIGNED,
-    allowNull: false,
-  },
-  kabupaten_kota_id: {
-    type: DataTypes.BIGINT.UNSIGNED,
-    allowNull: false,
-  },
-  kecamatan_id: {
-    type: DataTypes.BIGINT.UNSIGNED,
-    allowNull: false,
-  },
-  kode_pos: {
-    type: DataTypes.STRING(255),
-    allowNull: false,
-  },
-  maps: {
-    type: DataTypes.STRING(255),
-    allowNull: false,
-  },
-  detail_alamat: {
-    type: DataTypes.TEXT,
-    allowNull: false,
-  },
-  latitude: {
-    type: DataTypes.DECIMAL(10, 8),
-    allowNull: true,
-  },
-  longitude: {
-    type: DataTypes.DECIMAL(11, 8),
-    allowNull: true,
-  },
-  created_at: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW,
-  },
-  updated_at: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW,
-  },
-}, {
-  tableName: 'alamat_user',
   timestamps: true,
   underscored: true,
 });

@@ -1,4 +1,4 @@
-// keranjangProdukModels.js
+// models/keranjangProdukModels.js
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js';
 

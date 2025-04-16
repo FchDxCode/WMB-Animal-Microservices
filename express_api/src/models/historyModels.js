@@ -48,6 +48,10 @@ const HistoryLayanan = sequelize.define('HistoryLayanan', {
     type: DataTypes.BIGINT.UNSIGNED,
     allowNull: true,
   },
+  pembayaran_pet_hotel_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: true,
+  },
   pembayaran_house_call_id: {
     type: DataTypes.BIGINT.UNSIGNED,
     allowNull: true,
@@ -73,5 +77,16 @@ const HistoryLayanan = sequelize.define('HistoryLayanan', {
   timestamps: true,
   underscored: true,
 });
+
+// Definisikan relasi
+HistoryLayanan.belongsTo(StatusHistory, {
+    foreignKey: 'status_history_id',
+    as: 'statusHistory', 
+  });
+  
+  StatusHistory.hasMany(HistoryLayanan, {
+    foreignKey: 'status_history_id',
+    as: 'layanan', 
+  });
 
 export { StatusHistory, HistoryLayanan };

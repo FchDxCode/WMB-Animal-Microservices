@@ -1,4 +1,4 @@
-// utils/invoiceGenerator.js
+// utils/invoiceGeneratorUtils.js
 /**
  * Fungsi untuk generate nomor invoice dengan format INV-YYYYMMDD-XXXX
  * @returns {string} Nomor invoice yang digenerate
