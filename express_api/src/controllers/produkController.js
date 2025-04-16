@@ -21,7 +21,7 @@ const formatProductData = (product, includeDetails = false) => {
     diskon_produk: product.diskon_produk,
     berat_produk: product.berat_produk,
     slug: product.slug,
-    gambar: product.gambar_produk?.length > 0 
+    gambar_produk: product.gambar_produk?.length > 0 
       ? createImageUrl(product.gambar_produk[0].gambar, uploadFolders.productImages)
       : null
   };

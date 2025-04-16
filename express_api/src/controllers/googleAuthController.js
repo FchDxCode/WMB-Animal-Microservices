@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { User, GambarUser } from '../models/userModels.js';
 import dotenv from 'dotenv';
+import { uploadFolders, createImageUrl } from '../utils/uploadUtils.js';
 
 dotenv.config();
 
@@ -11,6 +12,27 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 
 // Membuat instance OAuth2Client
 const client = new OAuth2Client();
+
+// Helper function untuk format user data dengan URL gambar
+const formatUserData = (user) => {
+  if (!user) return null;
+  
+  const userData = user.toJSON ? user.toJSON() : { ...user };
+  delete userData.password;
+  
+  // Format gambar profile dengan URL lengkap
+  if (userData.gambar && userData.gambar.length > 0) {
+    userData.gambar = userData.gambar.map(img => ({
+      id: img.id,
+      users_id: img.users_id,
+      gambar: createImageUrl(img.gambar, uploadFolders.userImages),
+      created_at: img.created_at,
+      updated_at: img.updated_at
+    }));
+  }
+  
+  return userData;
+};
 
 export const googleLogin = async (req, res) => {
   try {
@@ -144,15 +166,14 @@ export const googleLogin = async (req, res) => {
     user.remember_token = token;
     await user.save();
 
-    // Mengembalikan data user dan token (tanpa password)
-    const userData = user.toJSON();
-    delete userData.password;
+    // Format data user dengan URL gambar lengkap
+    const formattedUserData = formatUserData(user);
 
     return res.status(200).json({
       success: true,
       message: 'Login dengan Google berhasil',
       data: {
-        user: userData,
+        user: formattedUserData,
         token
       }
     });
@@ -187,9 +208,12 @@ export const getUserInfo = async (req, res) => {
       });
     }
 
+    // Format data user dengan URL gambar lengkap
+    const formattedUserData = formatUserData(user);
+
     return res.status(200).json({
       success: true,
-      data: user
+      data: formattedUserData
     });
   } catch (error) {
     console.error('Error saat mengambil informasi user:', error);

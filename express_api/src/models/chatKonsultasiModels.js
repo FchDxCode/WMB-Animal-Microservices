@@ -2,7 +2,6 @@
 
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js';
-import { CheckoutKonsultasi } from './bookingKonsultasiModels.js';
 
 const ChatKonsultasi = sequelize.define('ChatKonsultasi', {
   id: {
@@ -51,11 +50,6 @@ const ChatKonsultasi = sequelize.define('ChatKonsultasi', {
   tableName: 'chat_konsultasi',
   timestamps: true,
   underscored: true,
-});
-
-ChatKonsultasi.belongsTo(CheckoutKonsultasi, { 
-  foreignKey: 'checkout_konsultasi_id', 
-  as: 'checkoutKonsultasi' 
 });
 
 export default ChatKonsultasi;

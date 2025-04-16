@@ -1,3 +1,5 @@
+// petModels.js
+
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js';
 
@@ -164,5 +166,9 @@ HewanPeliharaan.hasMany(GambarHewan, { foreignKey: 'hewan_peliharaan_id', as: 'g
 GambarHewan.belongsTo(HewanPeliharaan, { foreignKey: 'hewan_peliharaan_id', as: 'hewan' });
 RasHewan.belongsTo(JenisHewan, { foreignKey: 'jenis_hewan_id', as: 'jenis' });
 JenisHewan.hasMany(RasHewan, { foreignKey: 'jenis_hewan_id', as: 'rasHewan' });
+
+// Add the missing association here
+HewanPeliharaan.belongsTo(JenisHewan, { foreignKey: 'jenis_hewan_id', as: 'jenis' });
+JenisHewan.hasMany(HewanPeliharaan, { foreignKey: 'jenis_hewan_id', as: 'hewanPeliharaans' });
 
 export { HewanPeliharaan, GambarHewan, RasHewan, JenisHewan };

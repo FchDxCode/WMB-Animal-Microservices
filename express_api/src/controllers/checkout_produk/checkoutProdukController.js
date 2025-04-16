@@ -1,7 +1,7 @@
 // controllers/checkout_produk/checkoutProdukController.js
 import { CheckoutProduk, CheckoutItem, PembayaranProduk, EkspedisiData } from '../../models/checkoutProdukModels.js';
 import KeranjangProduk from '../../models/keranjangProdukModels.js';
-import { Produk } from '../../models/produkModels.js';
+import { Produk, GambarProduk } from '../../models/produkModels.js';
 import { AlamatUser } from '../../models/alamatUserModels.js';
 import { TotalCoinUser, CoinHistory } from '../../models/userCoinModels.js';
 import { ConfigPembayaran } from '../../models/configPembayaranModels.js';
@@ -9,6 +9,7 @@ import { generateInvoiceNumber } from '../../utils/invoiceGeneratorUtils.js';
 import { calculateCoin } from '../../utils/coinCalculatorUtils.js';
 import sequelize from '../../config/db.js';
 import { StatusHistory, HistoryLayanan } from '../../models/historyModels.js';
+import { uploadFolders, createImageUrl } from '../../utils/uploadUtils.js';
 
 /**
  * Mendapatkan data untuk tampilan halaman checkout
@@ -19,14 +20,22 @@ export const getCheckoutData = async (req, res) => {
   try {
     const userId = req.user.id;
     
-    // Ambil keranjang pengguna
+    // Ambil keranjang pengguna dengan include gambar produk
     const cartItems = await KeranjangProduk.findAll({
       where: { user_id: userId },
       include: [
         {
           model: Produk,
           as: 'produk',
-          attributes: ['id', 'nama_produk', 'harga_produk', 'diskon_produk', 'berat_produk']
+          attributes: ['id', 'nama_produk', 'harga_produk', 'diskon_produk', 'berat_produk'],
+          include: [
+            {
+              model: GambarProduk,
+              as: 'gambar_produk',
+              attributes: ['id', 'gambar'],
+              limit: 1 // Hanya ambil 1 gambar untuk setiap produk
+            }
+          ]
         }
       ]
     });
@@ -37,6 +46,32 @@ export const getCheckoutData = async (req, res) => {
         message: 'Keranjang belanja kosong'
       });
     }
+    
+    // Format cart items untuk menyertakan URL gambar
+    const formattedCartItems = cartItems.map(item => {
+      const harga = item.produk.harga_produk;
+      const diskon = item.produk.diskon_produk || 0;
+      const hargaSetelahDiskon = harga - diskon;
+      
+      return {
+        id: item.id,
+        produk_id: item.produk_id,
+        stok_produk_id: item.stok_produk_id,
+        jumlah_dibeli: item.jumlah_dibeli,
+        subtotal_harga: item.subtotal_harga,
+        produk: {
+          id: item.produk.id,
+          nama_produk: item.produk.nama_produk,
+          harga_produk: item.produk.harga_produk,
+          diskon_produk: item.produk.diskon_produk,
+          berat_produk: item.produk.berat_produk,
+          harga_setelah_diskon: hargaSetelahDiskon,
+          gambar_produk: item.produk.gambar_produk && item.produk.gambar_produk.length > 0 
+            ? createImageUrl(item.produk.gambar_produk[0].gambar, uploadFolders.productImages)
+            : null
+        }
+      };
+    });
     
     // Ambil alamat pengguna
     const addresses = await AlamatUser.findAll({
@@ -76,7 +111,7 @@ export const getCheckoutData = async (req, res) => {
     return res.status(200).json({
       success: true,
       data: {
-        cartItems,
+        cartItems: formattedCartItems,
         addresses,
         ekspedisi,
         subtotal,

@@ -4,11 +4,12 @@ import { Klinik, LayananKlinik } from '../../models/klinikModels.js';
 import { calculateCoin } from '../../utils/coinCalculatorUtils.js';
 import { uploadBuktiTransfer, createBuktiTransferUrl } from '../../utils/uploadBuktiTransferUtils.js';
 import { StatusHistory } from '../../models/historyModels.js';
-import { ConfigPembayaran } from '../../models/configPembayaranModels.js'; 
+import { ConfigPembayaran, Payment } from '../../models/configPembayaranModels.js'; 
 import { CoinService } from '../../services/coin/coinServices.js';
 import { HistoryLayanan } from '../../models/historyModels.js';
 import sequelize from '../../config/db.js';
 import { TotalCoinUser, CoinHistory } from '../../models/userCoinModels.js';
+import { createImageUrl, uploadFolders } from '../../utils/uploadUtils.js';
 
 // Tambahkan utility function untuk cek expired
 const isPaymentExpired = (createdAt) => {
@@ -109,7 +110,7 @@ export const createPembayaran = async (req, res) => {
       checkout_booking_klinik_id: checkout_id,
       payment_id: metode_pembayaran, // Ubah dari metode_pembayaran menjadi payment_id
       total_biaya: totalBiaya,
-      status: 'tertunda', // Default status
+      status: 'belum-bayar', // Default status
       kategori_status_history_id: defaultStatusHistory.id, // Gunakan ID dari status history
       koin_didapat: koinDidapat
     });
@@ -238,7 +239,7 @@ export const getPembayaranDetail = async (req, res) => {
     const { id } = req.params; 
     const user_id = req.user.id;
 
-    // Dapatkan data pembayaran
+    // Dapatkan data pembayaran dengan include Payment
     const pembayaran = await PembayaranKlinik.findByPk(id, {
       include: [
         {
@@ -253,6 +254,11 @@ export const getPembayaranDetail = async (req, res) => {
               ]
             }
           ]
+        },
+        {
+          model: Payment,
+          as: 'payment',
+          attributes: ['id', 'nama_metode', 'slug', 'gambar_payment']
         }
       ],
       transaction
@@ -279,8 +285,8 @@ export const getPembayaranDetail = async (req, res) => {
     const isExpired = isPaymentExpired(pembayaran.created_at);
     let statusUpdated = false;
 
-    // Jika expired dan status masih tertunda, update ke dibatalkan
-    if (isExpired && pembayaran.status === 'tertunda') {
+    // Jika expired dan status masih belum-bayar, update ke dibatalkan
+    if (isExpired && pembayaran.status === 'belum-bayar') {
       // Dapatkan status history untuk dibatalkan
       const cancelledStatus = await StatusHistory.findOne({
         where: { slug: 'dibatalkan' },
@@ -362,28 +368,35 @@ export const getPembayaranDetail = async (req, res) => {
     // Commit transaction
     await transaction.commit();
 
-    // Buat response
-    // In the getPembayaranDetail method, update the response:
+    // Format response data dengan informasi metode pembayaran
     return res.status(200).json({
       success: true,
       data: {
         id: pembayaran.id,
-        metode_pembayaran: pembayaran.payment_id, // Changed from metode_pembayaran to payment_id
+        metode_pembayaran: pembayaran.payment ? {
+          id: pembayaran.payment.id,
+          nama_metode: pembayaran.payment.nama_metode,
+          slug: pembayaran.payment.slug,
+          gambar: pembayaran.payment.gambar_payment 
+            ? createImageUrl(pembayaran.payment.gambar_payment, uploadFolders.paymentImages)
+            : null
+        } : null,
         total_biaya: pembayaran.total_biaya,
         status: statusUpdated ? 'dibatalkan' : pembayaran.status,
         status_history: statusHistory.slug,
-        bukti_pembayaran: pembayaran.bukti_pembayaran,
+        bukti_pembayaran: pembayaran.bukti_pembayaran 
+          ? createBuktiTransferUrl(pembayaran.bukti_pembayaran)
+          : null,
         koin_didapat: koinDidapat,
         created_at: pembayaran.created_at,
         updated_at: pembayaran.updated_at,
         invoice: pembayaran.checkout.invoice,
         no_rekening_klinik: pembayaran.checkout.booking.klinik.no_rekening_klinik,
-        // Info untuk expired payment
         payment_info: {
           is_expired: isExpired,
           expired_at: expiredAt,
           remaining_time: remainingTime,
-          can_upload: pembayaran.status === 'tertunda' && !isExpired
+          can_upload: pembayaran.status === 'belum-bayar' && !isExpired
         }
       }
     });

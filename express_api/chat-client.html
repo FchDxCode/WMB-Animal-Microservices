@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Konsultasi - Client (User)</title>
+  <!-- Socket.IO Client -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-6">
+
+  <div class="max-w-2xl mx-auto bg-white p-6 rounded shadow">
+    <h1 class="text-2xl font-bold mb-4">👤 Konsultasi - Client (User)</h1>
+
+    <!-- Token & Checkout -->
+    <div class="mb-4">
+      <label class="block mb-1 font-semibold">Token JWT (User):</label>
+      <input id="token" type="text" class="w-full p-2 border rounded" placeholder="Masukkan token JWT user">
+    </div>
+
+    <div class="mb-4">
+      <label class="block mb-1 font-semibold">Checkout ID:</label>
+      <input id="checkoutId" type="number" class="w-full p-2 border rounded" placeholder="Misal: 13">
+    </div>
+
+    <div class="flex flex-wrap gap-2 mb-6">
+      <!-- Connect & Join Room -->
+      <button onclick="connectSocket()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+        Connect & Join Room
+      </button>
+      <!-- End Consultation khusus user -->
+      <button onclick="endConsultation()" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
+        End Consultation
+      </button>
+    </div>
+
+    <!-- Chat Box -->
+    <div id="chatBox" class="border rounded h-64 overflow-y-auto mb-4 p-2 bg-gray-50"></div>
+
+    <!-- Input Pesan -->
+    <div class="flex gap-2 mb-4">
+      <input id="chatInput" type="text" placeholder="Tulis pesan..." class="flex-1 p-2 border rounded">
+      <button onclick="sendMessage()" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
+        Kirim
+      </button>
+    </div>
+
+    <!-- Mark as Read & Delete Message -->
+    <div class="flex gap-4 mb-4">
+      <div>
+        <label class="block mb-1 font-semibold">Message ID (untuk mark/read/delete):</label>
+        <input id="messageIdInput" type="number" class="p-2 border rounded" placeholder="Contoh: 101">
+      </div>
+      <div class="flex flex-col justify-end gap-2">
+        <button onclick="markAsRead()" class="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600">
+          Mark as Read
+        </button>
+        <button onclick="deleteMessage()" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
+          Delete Message
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let socket;
+
+    // ------------------
+    //  KONEKSI & JOIN
+    // ------------------
+    function connectSocket() {
+      const token = document.getElementById('token').value;
+      const checkoutId = parseInt(document.getElementById('checkoutId').value);
+
+      // Buat koneksi socket dengan membawa auth token
+      socket = io("http://localhost:3000", {
+        auth: { token }
+      });
+
+      // Saat koneksi berhasil
+      socket.on("connect", () => {
+        appendMessage("✅ Terhubung ke server. Connection ID: " + socket.id);
+        // Otomatis join room setelah connect
+        socket.emit("join_room", { checkoutId });
+      });
+
+      // ------------------
+      //   LISTENER EVENT
+      // ------------------
+      socket.on("room_joined", (data) => {
+        appendMessage("🚪 Room Joined: " + JSON.stringify(data));
+      });
+      socket.on("user_joined", (data) => {
+        appendMessage(`👤 ${data.name} (${data.role}) masuk ke room`);
+      });
+      socket.on("chat_history", (data) => {
+        appendMessage("📜 Riwayat chat:");
+        data.forEach(msg => {
+          const time = msg.created_at ? formatDateTime(msg.created_at) : "Waktu?";
+          appendMessage(`[${time}] ${msg.pesan_konsultasi}`);
+        });
+      });
+      socket.on("receive_message", (msg) => {
+        const senderName = msg.sender?.name || "Unknown";
+        const time = msg.created_at ? formatDateTime(msg.created_at) : formatDateTime(new Date());
+        appendMessage(`💬 [${time}] ${senderName}: ${msg.pesan_konsultasi}`);
+      });
+      socket.on("consultation_status", (data) => {
+        appendMessage("⏳ Status Konsultasi: " + JSON.stringify(data));
+      });
+      socket.on("consultation_started", (data) => {
+        appendMessage("🟢 Konsultasi dimulai! " + JSON.stringify(data));
+      });
+      socket.on("consultation_ended", (data) => {
+        appendMessage("🔴 Konsultasi berakhir: " + JSON.stringify(data));
+      });
+      socket.on("message_read", (data) => {
+        appendMessage("📖 Pesan dibaca: ID " + data.messageId);
+      });
+      socket.on("message_deleted", (data) => {
+        appendMessage("❌ Pesan dihapus: ID " + data.messageId);
+      });
+      socket.on("error", (err) => {
+        appendMessage("⚠️ Error: " + (err.message || JSON.stringify(err)));
+      });
+      socket.on("user_status_update", (data) => {
+        appendMessage(`👀 Status user: ${data.userId} isOnline=${data.isOnline}`);
+      });
+    }
+
+    // ------------------
+    //   FITUR CHAT
+    // ------------------
+    function sendMessage() {
+      const msg = document.getElementById('chatInput').value;
+      const checkoutId = parseInt(document.getElementById('checkoutId').value);
+      if (socket) {
+        socket.emit("send_message", { message: msg, checkoutId });
+        document.getElementById('chatInput').value = '';
+      }
+    }
+
+    function markAsRead() {
+      const messageId = parseInt(document.getElementById('messageIdInput').value);
+      if (socket) {
+        socket.emit("mark_as_read", { messageId });
+      }
+    }
+
+    function deleteMessage() {
+      const messageId = parseInt(document.getElementById('messageIdInput').value);
+      if (socket) {
+        socket.emit("delete_message", { messageId });
+      }
+    }
+
+    // ------------------
+    //  END KONSULTASI
+    // ------------------
+    function endConsultation() {
+      const checkoutId = parseInt(document.getElementById('checkoutId').value);
+      if (socket) {
+        socket.emit("end_consultation", { checkoutId });
+      }
+    }
+
+    // ------------------
+    //  UTIL
+    // ------------------
+    function appendMessage(msg) {
+      const chatBox = document.getElementById("chatBox");
+      chatBox.innerHTML += `<div class="mb-1">${msg}</div>`;
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function formatDateTime(dateString) {
+      const dateObj = new Date(dateString);
+      const options = {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      };
+      return dateObj.toLocaleString('en-GB', options);
+    }
+  </script>
+</body>
+</html>

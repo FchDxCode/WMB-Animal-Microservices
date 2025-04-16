@@ -1,6 +1,6 @@
 // controllers/checkout_produk/pembayaranProdukController.js
 import { PembayaranProduk, CheckoutProduk, CheckoutItem } from '../../models/checkoutProdukModels.js';
-import { Produk } from '../../models/produkModels.js';
+import { Produk, GambarProduk } from '../../models/produkModels.js';
 import { TotalCoinUser, CoinHistory } from '../../models/userCoinModels.js';
 import { ConfigPembayaran } from '../../models/configPembayaranModels.js';
 import { uploadBuktiTransfer, createBuktiTransferUrl } from '../../utils/uploadBuktiTransferUtils.js';
@@ -9,6 +9,7 @@ import { reduceProductStock } from '../../utils/productStokManagerUtils.js';
 import sequelize from '../../config/db.js';
 import { Op } from 'sequelize';
 import { StatusHistory, HistoryLayanan } from '../../models/historyModels.js';
+import { uploadFolders, createImageUrl } from '../../utils/uploadUtils.js';
 
 /**
  * Mendapatkan detail pembayaran
@@ -26,7 +27,7 @@ export const getPaymentDetail = async (req, res) => {
       });
     }
     
-    // Cari pembayaran berdasarkan invoice
+    // Cari pembayaran berdasarkan invoice dengan include gambar produk
     const pembayaran = await PembayaranProduk.findOne({
       where: { invoice: invoiceNumber },
       include: [
@@ -41,7 +42,22 @@ export const getPaymentDetail = async (req, res) => {
                 {
                   model: Produk,
                   as: 'produk',
-                  attributes: ['nama_produk']
+                  attributes: [
+                    'id', 
+                    'nama_produk', 
+                    'harga_produk', 
+                    'diskon_produk', 
+                    'slug',
+                    'berat_produk'
+                  ],
+                  include: [
+                    {
+                      model: GambarProduk,
+                      as: 'gambar_produk',
+                      attributes: ['id', 'gambar'],
+                      limit: 1
+                    }
+                  ]
                 }
               ]
             }
@@ -73,12 +89,61 @@ export const getPaymentDetail = async (req, res) => {
       isExpired = true;
     }
     
+    // Format response dengan URL gambar produk
+    const formattedItems = pembayaran.checkout.items.map(item => {
+      return {
+        id: item.id,
+        checkout_id: item.checkout_id,
+        produk_id: item.produk_id,
+        jumlah: item.jumlah,
+        harga_satuan: item.harga_satuan,
+        subtotal: item.subtotal,
+        produk: {
+          id: item.produk.id,
+          nama_produk: item.produk.nama_produk,
+          harga_produk: item.produk.harga_produk,
+          diskon_produk: item.produk.diskon_produk,
+          slug: item.produk.slug,
+          berat_produk: item.produk.berat_produk,
+          gambar: item.produk.gambar_produk && item.produk.gambar_produk.length > 0 
+            ? createImageUrl(item.produk.gambar_produk[0].gambar, uploadFolders.productImages)
+            : null
+        }
+      };
+    });
+    
+    // Buat response dengan format yang lebih baik
+    const formattedResponse = {
+      id: pembayaran.id,
+      checkout_id: pembayaran.checkout_id,
+      user_id: pembayaran.user_id,
+      invoice: pembayaran.invoice,
+      status: pembayaran.status,
+      metode_pembayaran: pembayaran.metode_pembayaran,
+      bank_tujuan: pembayaran.bank_tujuan,
+      jumlah_bayar: pembayaran.jumlah_bayar,
+      coin_digunakan: pembayaran.coin_digunakan,
+      bukti_bayar: pembayaran.bukti_bayar,
+      created_at: pembayaran.created_at,
+      updated_at: pembayaran.updated_at,
+      checkout: {
+        id: pembayaran.checkout.id,
+        user_id: pembayaran.checkout.user_id,
+        alamat_id: pembayaran.checkout.alamat_id,
+        ekspedisi_id: pembayaran.checkout.ekspedisi_id,
+        ongkir: pembayaran.checkout.ongkir,
+        total_harga: pembayaran.checkout.total_harga,
+        created_at: pembayaran.checkout.created_at,
+        updated_at: pembayaran.checkout.updated_at,
+        items: formattedItems
+      },
+      config_pembayaran: pembayaran.config_pembayaran,
+      isExpired
+    };
+    
     return res.status(200).json({
       success: true,
-      data: {
-        pembayaran,
-        isExpired
-      }
+      data: formattedResponse
     });
   } catch (error) {
     console.error('Error getting payment detail:', error);

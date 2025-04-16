@@ -2,6 +2,7 @@ import KeranjangProduk from '../models/keranjangProdukModels.js';
 import { Produk, GambarProduk } from '../models/produkModels.js';
 import { Op } from 'sequelize';
 import sequelize from '../config/db.js';
+import { uploadFolders, createImageUrl } from '../utils/uploadUtils.js';
 
 // Mendapatkan daftar produk di keranjang pengguna yang sedang login
 export const getKeranjangProduk = async (req, res) => {
@@ -15,7 +16,7 @@ export const getKeranjangProduk = async (req, res) => {
         {
           model: Produk,
           as: 'produk',
-          attributes: ['id', 'nama_produk', 'harga_produk', 'diskon_produk', 'slug'],
+          attributes: ['id', 'nama_produk', 'harga_produk', 'diskon_produk', 'slug', 'berat_produk'],
           include: [
             {
               model: GambarProduk,
@@ -34,22 +35,33 @@ export const getKeranjangProduk = async (req, res) => {
       0
     );
 
-    // Format response
-    const formattedItems = keranjangItems.map(item => ({
-      id: item.id,
-      produk_id: item.produk_id,
-      stok_produk_id: item.stok_produk_id,
-      jumlah_dibeli: item.jumlah_dibeli,
-      subtotal_harga: item.subtotal_harga,
-      produk: {
-        id: item.produk?.id,
-        nama_produk: item.produk?.nama_produk,
-        harga_produk: item.produk?.harga_produk,
-        diskon_produk: item.produk?.diskon_produk,
-        slug: item.produk?.slug,
-        gambar: item.produk?.gambar_produk?.length > 0 ? item.produk.gambar_produk[0].gambar : null
-      }
-    }));
+    // Format response dengan URL gambar lengkap
+    const formattedItems = keranjangItems.map(item => {
+      // Hitung harga setelah diskon
+      const hargaProduk = item.produk?.harga_produk || 0;
+      const diskonProduk = item.produk?.diskon_produk || 0;
+      const hargaSetelahDiskon = hargaProduk - diskonProduk;
+      
+      return {
+        id: item.id,
+        produk_id: item.produk_id,
+        stok_produk_id: item.stok_produk_id,
+        jumlah_dibeli: item.jumlah_dibeli,
+        subtotal_harga: item.subtotal_harga,
+        produk: {
+          id: item.produk?.id,
+          nama_produk: item.produk?.nama_produk,
+          harga_produk: hargaProduk,
+          diskon_produk: diskonProduk,
+          harga_setelah_diskon: hargaSetelahDiskon,
+          slug: item.produk?.slug,
+          berat_produk: item.produk?.berat_produk,
+          gambar_produk: item.produk?.gambar_produk?.length > 0 
+            ? createImageUrl(item.produk.gambar_produk[0].gambar, uploadFolders.productImages)
+            : null
+        }
+      };
+    });
 
     return res.status(200).json({
       success: true,

@@ -34,6 +34,14 @@ const Dokter = sequelize.define('Dokter', {
     type: DataTypes.BIGINT.UNSIGNED,
     allowNull: false,
   },
+  remember_token: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  last_login: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
   created_at: {
     type: DataTypes.DATE,
     allowNull: true,

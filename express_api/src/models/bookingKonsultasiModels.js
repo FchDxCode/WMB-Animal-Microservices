@@ -3,6 +3,12 @@
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js';
 import ChatKonsultasi from './chatKonsultasiModels.js';
+import { HistoryLayanan, StatusHistory } from './historyModels.js';
+import { Klinik } from './klinikModels.js';
+import { Dokter } from './dokterModels.js';
+import { HewanPeliharaan } from './petModels.js';
+import { User } from './userModels.js';
+import { Payment } from './configPembayaranModels.js';
 
 const CheckoutKonsultasi = sequelize.define('CheckoutKonsultasi', {
   id: {
@@ -53,11 +59,11 @@ const CheckoutKonsultasi = sequelize.define('CheckoutKonsultasi', {
     allowNull: false,
   },
   created_at: {
-    type: DataTypes.TIMESTAMP,
+    type: DataTypes.DATE,
     allowNull: true,
   },
   updated_at: {
-    type: DataTypes.TIMESTAMP,
+    type: DataTypes.DATE,
     allowNull: true,
   },
 }, {
@@ -108,13 +114,53 @@ const PembayaranKonsultasi = sequelize.define('PembayaranKonsultasi', {
   underscored: true,
 });
 
-// Relasi antara PembayaranKonsultasi dan CheckoutKonsultasi
-PembayaranKonsultasi.belongsTo(CheckoutKonsultasi, { foreignKey: 'checkout_konsultasi_id', as: 'checkout' });
-CheckoutKonsultasi.hasOne(PembayaranKonsultasi, { foreignKey: 'checkout_konsultasi_id', as: 'pembayaran' });
-
-CheckoutKonsultasi.hasMany(ChatKonsultasi, { 
-  foreignKey: 'checkout_konsultasi_id', 
-  as: 'chatKonsultasi' 
+// Relasi antara CheckoutKonsultasi dan Payment
+CheckoutKonsultasi.belongsTo(Payment, { 
+  foreignKey: 'payment_id', 
+  as: 'payment' 
 });
+
+// Relasi antara PembayaranKonsultasi dan CheckoutKonsultasi
+PembayaranKonsultasi.belongsTo(CheckoutKonsultasi, { 
+  foreignKey: 'checkout_konsultasi_id', 
+  as: 'checkout' 
+});
+CheckoutKonsultasi.hasOne(PembayaranKonsultasi, { 
+  foreignKey: 'checkout_konsultasi_id', 
+  as: 'pembayaran' 
+});
+
+// Relasi antara PembayaranKonsultasi dan StatusHistory
+PembayaranKonsultasi.belongsTo(StatusHistory, { 
+  foreignKey: 'kategori_status_history_id', 
+  as: 'statusHistory' 
+});
+
+// Relasi antara PembayaranKonsultasi dan HistoryLayanan
+PembayaranKonsultasi.hasMany(HistoryLayanan, {
+  foreignKey: 'pembayaran_konsultasi_id',
+  as: 'historyLayanan',
+});
+HistoryLayanan.belongsTo(PembayaranKonsultasi, {
+  foreignKey: 'pembayaran_konsultasi_id',
+  as: 'pembayaranKonsultasi',
+});
+
+// Relasi antara CheckoutKonsultasi dan ChatKonsultasi
+CheckoutKonsultasi.hasMany(ChatKonsultasi, {
+  foreignKey: 'checkout_konsultasi_id',
+  as: 'chatKonsultasi'
+});
+
+// Relasi antara CheckoutKonsultasi dan Klinik
+CheckoutKonsultasi.belongsTo(Klinik, { foreignKey: 'klinik_id', as: 'klinik' });
+
+// Relasi antara CheckoutKonsultasi dan Dokter
+CheckoutKonsultasi.belongsTo(Dokter, { foreignKey: 'dokter_id', as: 'dokter' });
+
+// Relasi antara CheckoutKonsultasi dan HewanPeliharaan
+CheckoutKonsultasi.belongsTo(HewanPeliharaan, { foreignKey: 'hewan_peliharaan_id', as: 'hewan' });
+
+CheckoutKonsultasi.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 export { CheckoutKonsultasi, PembayaranKonsultasi };

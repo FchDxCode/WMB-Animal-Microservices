@@ -3,12 +3,13 @@ import { CheckoutBookingKlinik, BookingKlinik, PembayaranKlinik } from '../../mo
 import { Klinik, LayananKlinik } from '../../models/klinikModels.js';
 import { Keluhan } from '../../models/keluhanModels.js';
 import { HewanPeliharaan } from '../../models/petModels.js';
-import { ConfigPembayaran } from '../../models/configPembayaranModels.js';
+import { ConfigPembayaran, Payment } from '../../models/configPembayaranModels.js';
 import { calculateCoin } from '../../utils/coinCalculatorUtils.js';
 import { config } from 'dotenv';
 import { uploadFolders, createImageUrl } from '../../utils/uploadUtils.js';
 import { StatusHistory, HistoryLayanan } from '../../models/historyModels.js';
 import sequelize from '../../config/db.js';
+import { createBuktiTransferUrl } from '../../utils/uploadBuktiTransferUtils.js';
 
 /**
  * Controller untuk mendapatkan detail pesanan
@@ -72,9 +73,16 @@ export const getDetailPesanan = async (req, res) => {
     // Dapatkan layanan
     const layanan = await LayananKlinik.findByPk(checkout.booking.layanan_klinik_id, { transaction });
 
-    // Cek apakah sudah ada pembayaran
+    // Cek apakah sudah ada pembayaran dengan include Payment
     let pembayaran = await PembayaranKlinik.findOne({
       where: { checkout_booking_klinik_id: checkout.id },
+      include: [
+        {
+          model: Payment,
+          as: 'payment',
+          attributes: ['id', 'nama_metode', 'slug', 'gambar_payment']
+        }
+      ],
       transaction
     });
 
@@ -174,7 +182,9 @@ export const getDetailPesanan = async (req, res) => {
           expired_at: expiredAt,
           remaining_time: remainingTime,
           can_upload: pembayaran.status === 'tertunda' && !isExpired,
-          bukti_pembayaran: pembayaran.bukti_pembayaran
+          bukti_pembayaran: pembayaran.bukti_pembayaran 
+            ? createBuktiTransferUrl(pembayaran.bukti_pembayaran)
+            : null
         } : null,
         informasi_booking: {
           tipe_booking: checkout.booking.tipe_booking,
@@ -190,10 +200,19 @@ export const getDetailPesanan = async (req, res) => {
           jenis_kelamin: hewan.jenis_kelamin,
           tanggal_lahir: hewan.tanggal_lahir_hewan,
           berat_badan: hewan.berat_badan,
-          profile_hewan: hewan.gambar && hewan.gambar.length > 0 ? createImageUrl(hewan.gambar[0].profile_hewan, uploadFolders.petImages) : null,
+          profile_hewan: hewan.gambar && hewan.gambar.length > 0 
+            ? createImageUrl(hewan.gambar[0].profile_hewan, uploadFolders.petImages)
+            : null,
           keluhan: keluhan.keluhan
         },
-        metode_pembayaran: pembayaran ? pembayaran.metode_pembayaran : null,
+        metode_pembayaran: pembayaran?.payment ? {
+          id: pembayaran.payment.id,
+          nama_metode: pembayaran.payment.nama_metode,
+          slug: pembayaran.payment.slug,
+          gambar: pembayaran.payment.gambar_payment 
+            ? createImageUrl(pembayaran.payment.gambar_payment, uploadFolders.paymentImages)
+            : null
+        } : null,
         rincian_pesanan: {
           nama_layanan: layanan ? layanan.nama_layanan : 'Layanan Tidak Tersedia',
           harga_layanan: layanan ? layanan.harga_layanan : 0,

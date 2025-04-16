@@ -3,6 +3,7 @@
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js';
 import { Klinik } from './klinikModels.js'; // pastikan import model Klinik
+import { Payment } from './configPembayaranModels.js'; // Tambahkan import Payment
 // Tambahkan import BookingKlinik kalau dipisahkan file-nya
 // (Saya asumsikan BookingKlinik, CheckoutBookingKlinik, dsb. memang di file ini)
 
@@ -164,6 +165,12 @@ CheckoutBookingKlinik.belongsTo(BookingKlinik, {
 PembayaranKlinik.belongsTo(CheckoutBookingKlinik, { 
   foreignKey: 'checkout_booking_klinik_id', 
   as: 'checkout' 
+});
+
+// Tambahkan relasi PembayaranKlinik → Payment
+PembayaranKlinik.belongsTo(Payment, {
+  foreignKey: 'payment_id',
+  as: 'payment'
 });
 
 export { BookingKlinik, CheckoutBookingKlinik, PembayaranKlinik };

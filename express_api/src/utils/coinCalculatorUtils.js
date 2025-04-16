@@ -1,4 +1,4 @@
-// utils/coinCalculator.js
+// utils/coinCalculatorUtils.js
 /**
  * Fungsi untuk menghitung koin berdasarkan total biaya dan persentase koin
  * @param {number} totalBiaya Total biaya dalam Rupiah

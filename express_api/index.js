@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
 import redoc from 'redoc-express';
-import swaggerSpec from './src/config/swagger.js'; 
+import swaggerSpec from './src/config/swagger.js';
 import dotenv from 'dotenv';
 import swaggerJSDoc from 'swagger-jsdoc';
 import path from 'path';
@@ -27,6 +27,10 @@ import checkoutProdukRoutes from './src/routes/checkoutProdukRoutes.js';
 import googleAuthRoutes from './src/routes/googleAuthRoutes.js';
 import klinikKonsultasiRoutes from './src/routes/klinikKonsultasiRoutes.js';
 import klinikTerdekatRoutes from './src/routes/klinikTerdekatRoutes.js';
+import { initSocket } from './src/controllers/booking_konsultasi/chatKonsultasiController.js';
+import KonsultasiRoutes from './src/routes/konsultasiRoutes.js';
+import authDokterRoutes from './src/routes/authDokterRoutes.js';
+import petHotelRoutes from './src/routes/petHotelRoutes.js';
 
 dotenv.config();
 
@@ -39,7 +43,7 @@ app.use(express.urlencoded({ extended: true }));
 
 const options = {
   definition: swaggerSpec,
-  apis: ['./src/routes/*.js'], 
+  apis: ['./src/routes/*.js'],
 };
 const openapiSpecification = swaggerJSDoc(options);
 
@@ -62,6 +66,9 @@ app.use('/api/keranjang', keranjangProdukRoutes);
 app.use('/api/checkout', checkoutProdukRoutes);
 app.use('/api/klinik-konsultasi', klinikKonsultasiRoutes);
 app.use('/api/klinik-terdekat', klinikTerdekatRoutes);
+app.use('/api/konsultasi', KonsultasiRoutes);
+app.use('/api/auth-dokter', authDokterRoutes);
+app.use('/api/pethotel', petHotelRoutes);
 
 // static storage
 app.use('/images', express.static(path.join(process.cwd(), 'public', 'images')));
@@ -75,7 +82,7 @@ app.get('/', (req, res) => {
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpecification));
 
 // Redoc
-app.get('/redoc', redoc({ 
+app.get('/redoc', redoc({
   title: 'API Docs',
   specUrl: '/swagger.json'
 }));
@@ -83,7 +90,17 @@ app.get('/swagger.json', (req, res) => {
   res.json(openapiSpecification);
 });
 
+// payment init
 runPaymentExpirationScheduler();
+
+// Socket.IO setup
+const server = app.listen(PORT, () => {
+  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Swagger Docs: http://localhost:${PORT}/docs`);
+  console.log(`Redoc Docs:   http://localhost:${PORT}/redoc`);
+});
+
+const io = initSocket(server);
 
 app.use((req, res) => {
   res.status(404).json({
@@ -99,12 +116,6 @@ app.use((err, req, res, next) => {
     message: 'Terjadi kesalahan pada server',
     error: err.message,
   });
-});
-
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-  console.log(`Swagger Docs: http://localhost:${PORT}/docs`);
-  console.log(`Redoc Docs:   http://localhost:${PORT}/redoc`);
 });
 
 export default app;

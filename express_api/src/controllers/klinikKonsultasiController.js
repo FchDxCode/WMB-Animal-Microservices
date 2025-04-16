@@ -1,5 +1,32 @@
 import { Klinik, GambarKlinik, LayananKlinik, JadwalBukaKlinik } from '../models/klinikModels.js';
 import { Dokter, GambarDokter } from '../models/dokterModels.js';
+import { uploadFolders, createImageUrl } from '../utils/uploadUtils.js';
+
+// Helper function untuk format data klinik
+const formatKlinikData = (klinik) => {
+  return {
+    id: klinik.id,
+    nama_klinik: klinik.nama_klinik,
+    deskripsi_klinik: klinik.deskripsi_klinik,
+    harga_konsultasi: klinik.harga_konsultasi,
+    waktu_konsultasi: klinik.waktu_konsultasi,
+    logo_klinik: klinik.gambar && klinik.gambar.length > 0 
+      ? createImageUrl(klinik.gambar[0].logo_klinik, uploadFolders.klinikImages)
+      : null
+  };
+};
+
+// Helper function untuk format data dokter
+const formatDokterData = (dokter) => {
+  return {
+    id: dokter.id,
+    nama_dokter: dokter.nama,
+    universitas_dokter: dokter.universitas,
+    gambar_dokter: dokter.gambar_dokter && dokter.gambar_dokter.length > 0 
+      ? createImageUrl(dokter.gambar_dokter[0].gambar, uploadFolders.dokterImages)
+      : null
+  };
+};
 
 // Mendapatkan daftar semua klinik konsultasi
 export const getAllKlinik = async (req, res) => {
@@ -23,33 +50,23 @@ export const getAllKlinik = async (req, res) => {
 
     if (!klinik || klinik.length === 0) {
       return res.status(404).json({
-        status: false,
+        success: false,
         message: "Data klinik konsultasi tidak ditemukan"
       });
     }
 
-    // Format data untuk respons
-    const formattedKlinik = klinik.map(item => {
-      return {
-        id: item.id,
-        nama_klinik: item.nama_klinik,
-        deskripsi_klinik: item.deskripsi_klinik,
-        harga_konsultasi: item.harga_konsultasi,
-        waktu_konsultasi: item.waktu_konsultasi,
-        logo_klinik: item.gambar && item.gambar.length > 0 ? 
-          item.gambar[0].logo_klinik : null
-      };
-    });
+    // Format data untuk respons dengan URL gambar lengkap
+    const formattedKlinik = klinik.map(formatKlinikData);
 
     return res.status(200).json({
-      status: true,
+      success: true,
       message: "Berhasil mendapatkan data klinik konsultasi",
       data: formattedKlinik
     });
   } catch (error) {
     console.error("Error getting klinik:", error);
     return res.status(500).json({
-      status: false,
+      success: false,
       message: "Terjadi kesalahan pada server",
       error: error.message
     });
@@ -66,7 +83,7 @@ export const getDokterByKlinikId = async (req, res) => {
     
     if (!klinik) {
       return res.status(404).json({
-        status: false,
+        success: false,
         message: "Klinik tidak ditemukan"
       });
     }
@@ -89,31 +106,23 @@ export const getDokterByKlinikId = async (req, res) => {
 
     if (!dokter || dokter.length === 0) {
       return res.status(404).json({
-        status: false,
+        success: false,
         message: "Tidak ada dokter yang tersedia di klinik ini"
       });
     }
 
-    // Format data dokter untuk respons
-    const formattedDokter = dokter.map(item => {
-      return {
-        id: item.id,
-        nama_dokter: item.nama,
-        universitas_dokter: item.universitas,
-        gambar_dokter: item.gambar_dokter && item.gambar_dokter.length > 0 ? 
-          item.gambar_dokter[0].gambar : null
-      };
-    });
+    // Format data dokter untuk respons dengan URL gambar lengkap
+    const formattedDokter = dokter.map(formatDokterData);
 
     return res.status(200).json({
-      status: true,
+      success: true,
       message: "Berhasil mendapatkan data dokter",
       data: formattedDokter
     });
   } catch (error) {
     console.error("Error getting dokter by klinik:", error);
     return res.status(500).json({
-      status: false,
+      success: false,
       message: "Terjadi kesalahan pada server",
       error: error.message
     });

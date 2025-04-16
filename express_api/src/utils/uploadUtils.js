@@ -15,6 +15,9 @@ export const uploadPaths = {
   mediaSections: path.join(process.cwd(), BASE_STORAGE_PATH, 'media-sections'),
   configImages: path.join(process.cwd(), BASE_STORAGE_PATH, 'config-images'),
   productImages: path.join(process.cwd(), BASE_STORAGE_PATH, 'product-images'),
+  klinikImages: path.join(process.cwd(), BASE_STORAGE_PATH, 'klinik-images'),
+  dokterImages: path.join(process.cwd(), BASE_STORAGE_PATH, 'dokter-images'),
+  paymentImages: path.join(process.cwd(), BASE_STORAGE_PATH, 'payment-images'),
 };
 
 // Buat direktori jika belum ada
@@ -103,7 +106,43 @@ export const uploadConfig = {
         cb(new Error('Invalid file type. Only JPEG, PNG and GIF are allowed.'));
       }
     }
-  }
+  },
+  klinikImage: {
+    storage: createStorage(uploadPaths.klinikImages),
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    fileFilter: (req, file, cb) => {
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+      if (allowedTypes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Invalid file type. Only JPEG, PNG and GIF are allowed.'));
+      }
+    }
+  },
+  dokterImage: {
+    storage: createStorage(uploadPaths.dokterImages),
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    fileFilter: (req, file, cb) => {
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+      if (allowedTypes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Invalid file type. Only JPEG, PNG and GIF are allowed.'));
+      }
+    }
+  },
+  paymentImage: {
+    storage: createStorage(uploadPaths.paymentImages),
+    limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit untuk gambar payment
+    fileFilter: (req, file, cb) => {
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+      if (allowedTypes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Invalid file type. Only JPEG, PNG and GIF are allowed.'));
+      }
+    }
+  },
 };
 
 // Helper untuk membuat URL gambar
@@ -119,5 +158,8 @@ export const uploadFolders = {
   artikelImages: 'artikel-images',
   mediaSections: 'media-sections',
   configImages: 'config-images',
-  productImages: 'product-images'
+  productImages: 'product-images',
+  klinikImages: 'klinik-images',
+  dokterImages: 'dokter-images',
+  paymentImages: 'payment-images'
 };
