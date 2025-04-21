@@ -31,6 +31,8 @@ import { initSocket } from './src/controllers/booking_konsultasi/chatKonsultasiC
 import KonsultasiRoutes from './src/routes/konsultasiRoutes.js';
 import authDokterRoutes from './src/routes/authDokterRoutes.js';
 import petHotelRoutes from './src/routes/petHotelRoutes.js';
+import houseCallRoutes from './src/routes/HouseCallRoutes.js';
+import paymentRoutes from './src/routes/paymentRoutes.js';
 
 dotenv.config();
 
@@ -56,6 +58,7 @@ app.use('/api/pets', petRoutes);
 app.use('/api/alamat', alamatUserRoutes);
 app.use('/api/artikel', artikelRoutes);
 app.use('/api/klinik', klinikRoutes);
+app.use('/api/payments', paymentRoutes); 
 app.use('/api/booking-klinik', bookingKlinikRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api/produk', produkRoutes);
@@ -69,6 +72,7 @@ app.use('/api/klinik-terdekat', klinikTerdekatRoutes);
 app.use('/api/konsultasi', KonsultasiRoutes);
 app.use('/api/auth-dokter', authDokterRoutes);
 app.use('/api/pethotel', petHotelRoutes);
+app.use('/api/housecall', houseCallRoutes);
 
 // static storage
 app.use('/images', express.static(path.join(process.cwd(), 'public', 'images')));
