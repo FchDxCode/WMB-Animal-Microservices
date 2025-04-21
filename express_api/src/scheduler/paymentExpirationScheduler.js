@@ -3,6 +3,7 @@ import { PembayaranProduk } from '../models/checkoutProdukModels.js';
 import { TotalCoinUser, CoinHistory } from '../models/userCoinModels.js';
 import { Op } from 'sequelize';
 import sequelize from '../config/db.js';
+import { checkExpiredHouseCallPayments } from '../controllers/booking_housecall/pembayaranHouseCallController.js';
 
 /**
  * Scheduler untuk mengecek dan mengubah status pembayaran produk yang sudah melewati batas waktu (24 jam)
@@ -90,6 +91,18 @@ export const runPaymentExpirationScheduler = () => {
       await checkExpiredProductPayments();
     } catch (error) {
       console.error('Failed to run payment expiration scheduler:', error);
+    }
+  }, 60 * 60 * 1000); // 1 jam dalam milidetik
+};
+
+export const runAllPaymentExpirationSchedulers = () => {
+  // Jalankan scheduler setiap 1 jam
+  setInterval(async () => {
+    try {
+      await checkExpiredProductPayments();
+      await checkExpiredHouseCallPayments();
+    } catch (error) {
+      console.error('Failed to run payment expiration schedulers:', error);
     }
   }, 60 * 60 * 1000); // 1 jam dalam milidetik
 };
